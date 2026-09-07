@@ -231,7 +231,10 @@ function LifecycleSection({ apiKey }) {
       const { contentHash } = await analyzeFile(file.name, await file.arrayBuffer())
       const res = await api.verify({ contentHash, level: 2 })
       if (!res.attribution?.docGuid) {
-        throw new Error(`원장에서 문서를 찾지 못했습니다 (ledger=${res.checks.ledger})`)
+        throw new Error(
+          res.checks.ledger === 'unregistered'
+            ? '원장에 발급 기록이 없습니다. 라벨이 붙어 있는데도 이 메시지가 나오면 발급 이후 원장이 초기화된 경우입니다(인메모리 데모 모드는 서버 재시작 시 초기화) — lm issue <파일> --force 로 재등록하거나, 영속 운영은 PostgreSQL 모드(LM_DB_URL)를 사용하세요.'
+            : `원장 조회 불가 (ledger=${res.checks.ledger}) — 서버 연결을 확인하세요`)
       }
       setTarget({
         fileName: file.name,

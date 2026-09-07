@@ -103,9 +103,15 @@ func cmdIssue() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// 재부착 방지: 이미 라벨이 있는가
+			// 재부착 방지: 이미 라벨이 있는가.
+			// --force 는 파일을 바꾸지 않고 원장에만 재등록한다 —
+			// 인메모리 데모 모드에서 서버 재시작으로 원장이 초기화됐을 때 사용.
+			alreadyLabeled := false
 			if _, err := attacher.Extract(bytes.NewReader(data), int64(len(data))); err == nil {
-				return fmt.Errorf("%s 에는 이미 라벨이 부착되어 있습니다 (lm verify로 확인)", path)
+				if !force {
+					return fmt.Errorf("%s 에는 이미 라벨이 부착되어 있습니다. 원장 재등록은 --force (파일은 변경하지 않음)", path)
+				}
+				alreadyLabeled = true
 			}
 			hash, err := hashTargetHex(attacher, data)
 			if err != nil {
@@ -140,6 +146,9 @@ func cmdIssue() *cobra.Command {
 			var preflight bytes.Buffer // 내장 사전 검사 결과 (본문 보관)
 			embedOK := false
 			switch {
+			case alreadyLabeled:
+				// 재등록: 라벨은 이미 파일 안에 있다
+				method, reason = attach.MethodEmbedded, ""
 			case !embed:
 				// 사용자가 내장을 요청하지 않음 → 사이드카 (폴백 아님)
 				if method != attach.MethodLedgerOnly {
@@ -177,7 +186,11 @@ func cmdIssue() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("labelDer 디코드: %w", err)
 			}
-			if embedOK {
+			switch {
+			case alreadyLabeled:
+				_ = der
+				fmt.Printf("원장 재등록 완료 (기존 라벨 유지): %s\n", path)
+			case embedOK:
 				var out bytes.Buffer
 				if err := attacher.Attach(bytes.NewReader(data), &out, der); err != nil {
 					return fmt.Errorf("내장: %w", err)
@@ -186,7 +199,7 @@ func cmdIssue() *cobra.Command {
 					return fmt.Errorf("파일 쓰기: %w", err)
 				}
 				fmt.Printf("발급 완료 (파일에 내장 — %s): %s\n", res.Format.Location, path)
-			} else {
+			default:
 				if _, err := os.Stat(path + sidecarExt); err == nil && !force {
 					return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
 				}

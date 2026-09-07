@@ -103,7 +103,13 @@ export async function analyzeFile(fileName, buf) {
   const format = await resolveLocal(fileName, bytes)
 
   // 1) 마크다운: front matter 내장 + 정규화 해시
+  // (구버전 트레일러 내장 파일 호환: 트레일러를 먼저 뗀다 — Go와 동일)
   if (format.id === 'markdown') {
+    const legacy = extractEmbedded(buf)
+    if (legacy) {
+      const contentHash = await hashBody(format, legacy.original)
+      return { contentHash, bodyBytes: legacy.original, labelDerBytes: legacy.der, labelSource: '파일 안에 (꼬리표)', format }
+    }
     const text = new TextDecoder().decode(bytes)
     const { body, labelB64 } = stripLM(text)
     const bodyBytes = new TextEncoder().encode(body)

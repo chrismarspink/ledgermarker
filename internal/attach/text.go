@@ -71,6 +71,10 @@ func (t *textAttacher) HashTarget(r io.ReaderAt, size int64) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("attach: read: %w", err)
 	}
+	// 구버전 트레일러 내장 파일 호환: 트레일러를 먼저 뗀다
+	if orig, _, ok := SplitTrailer(data); ok {
+		data = orig
+	}
 	body, _ := stripLM(data)
 	sum := sha256.Sum256(NormalizeText(body))
 	return sum[:], nil
@@ -101,6 +105,10 @@ func (t *textAttacher) Extract(r io.ReaderAt, size int64) ([]byte, error) {
 	data, err := readAll(r, size)
 	if err != nil {
 		return nil, fmt.Errorf("attach: read: %w", err)
+	}
+	// 구버전 트레일러 내장 파일 호환
+	if _, der, ok := SplitTrailer(data); ok {
+		return der, nil
 	}
 	_, b64 := stripLM(data)
 	if b64 == "" {
