@@ -121,3 +121,28 @@ table.ledger td.mono { font-family: ui-monospace, monospace; font-size: 12px; }
 .keytag { font-size: 12px; border-radius: 999px; padding: 2px 10px; width: fit-content; }
 .keytag.private { background: #fdecec; color: var(--bad); }
 .keytag.public { background: #e6f4ec; color: var(--ok); }
+
+/* 도움말 */
+.help { display: flex; gap: 28px; align-items: flex-start; }
+.help-toc { display: flex; flex-direction: column; gap: 8px; min-width: 180px; position: sticky; top: 16px; padding-top: 16px; }
+.help-toc a { color: var(--muted); text-decoration: none; font-size: 14px; padding: 6px 10px; border-radius: 8px; }
+.help-toc a.active { background: #eef1f6; color: var(--navy); font-weight: 700; }
+.help-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.7; }
+.help-body h2 { color: var(--navy); }
+.help-filters { display: flex; gap: 10px; flex-wrap: wrap; }
+.help-filters input, .help-filters select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: #fff; }
+@media (max-width: 720px) { .help { flex-direction: column; } .help-toc { flex-direction: row; flex-wrap: wrap; position: static; } }
+
+.notice { margin: 18px 0; padding: 12px 16px; background: #fff8e6; border: 1px solid #eadfb8; border-radius: 10px; font-size: 13px; }
+.filecheck { margin: 16px 0; padding: 16px 20px; border: 2px dashed #c3cad6; border-radius: 12px; background: #fff; cursor: pointer; font-size: 13px; }
+.filecheck-result { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.mbadge, .sbadge { display: inline-block; font-size: 12px; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.mbadge.m-embedded { background: #e6f4ec; color: var(--ok); }
+.mbadge.m-container { background: #e8f0fe; color: #1a56b0; }
+.mbadge.m-sidecar { background: #f3e8fe; color: #7c3aed; }
+.mbadge.m-ledger_only { background: #eef1f6; color: var(--muted); }
+.sbadge.s-A { background: #e6f4ec; color: var(--ok); }
+.sbadge.s-B { background: #fff3e0; color: var(--warn); }
+.sbadge.s-C { background: #eef1f6; color: var(--muted); }
+.warnicon { cursor: help; }
+table.ledger tr.hl td { background: #fff8d6; }

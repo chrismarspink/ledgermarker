@@ -4,6 +4,7 @@ import { sha256Hex, sha256HexBytes, bytesToBase64, hexToBytes } from '../lib/has
 import { api, getTrustListCached } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
 import { extractEmbedded } from '../lib/embed.js'
+import { analyzeFile } from '../lib/attach.js'
 import ResultCard from '../components/ResultCard.jsx'
 import StructureView from '../components/StructureView.jsx'
 import AttackDemo from '../components/AttackDemo.jsx'
@@ -90,31 +91,34 @@ async function runVerify(doc, sig) {
   let derBytes = null
   let isEmbedded = false
   let originalSize = doc?.size ?? 0
+  let formatId = ''
 
   if (sig) {
     const der = await sig.arrayBuffer()
     derBytes = new Uint8Array(der)
     labelDerB64 = bytesToBase64(der)
     label = parseLabel(der) // 평문 속성 — 오프라인에서도 읽힌다
-    labelSource = '사이드카(.lmsig)'
+    labelSource = '옆에 별도 파일(.lmsig)'
   }
   if (doc) {
     const buf = await doc.arrayBuffer()
-    const embedded = extractEmbedded(buf)
-    if (embedded) {
-      // 라벨 내장 파일: 트레일러를 떼고 원본 부분만 해시한다
+    // 포맷 카탈로그 기반 분석: 해시 대상(라벨 제외·필요 시 정규화)과
+    // 내장 라벨을 포맷에 맞게 처리한다 (internal/attach의 JS 미러)
+    const analysis = await analyzeFile(doc.name, buf)
+    contentHash = analysis.contentHash
+    formatId = analysis.format.id
+    const emb = extractEmbedded(buf)
+    if (emb) {
       isEmbedded = true
-      originalSize = embedded.original.length
-      contentHash = await sha256HexBytes(embedded.original)
-      if (!sig) {
-        derBytes = embedded.der
-        labelDerB64 = bytesToBase64(embedded.der)
-        label = parseLabel(embedded.der.buffer.slice(
-          embedded.der.byteOffset, embedded.der.byteOffset + embedded.der.byteLength))
-        labelSource = '파일 내장(트레일러)'
-      }
-    } else {
-      contentHash = await sha256Hex(doc)
+      originalSize = emb.original.length
+    }
+    if (!sig && analysis.labelDerBytes) {
+      derBytes = analysis.labelDerBytes
+      labelDerB64 = bytesToBase64(analysis.labelDerBytes)
+      label = parseLabel(analysis.labelDerBytes.buffer.slice(
+        analysis.labelDerBytes.byteOffset,
+        analysis.labelDerBytes.byteOffset + analysis.labelDerBytes.byteLength))
+      labelSource = analysis.labelSource
     }
   } else if (label?.contentHash) {
     contentHash = label.contentHash // 라벨만 제시된 경우
@@ -122,7 +126,7 @@ async function runVerify(doc, sig) {
   if (!contentHash) throw new Error('문서 파일 또는 라벨이 필요합니다')
 
   const meta = {
-    fileName: doc?.name || sig?.name, contentHash, label, labelSource,
+    fileName: doc?.name || sig?.name, contentHash, label, labelSource, formatId,
     // 구조 뷰어(StructureView)용 원시 데이터
     structure: {
       fileName: doc?.name || sig?.name,

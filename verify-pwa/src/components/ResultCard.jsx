@@ -1,4 +1,5 @@
 import React from 'react'
+import { Link } from 'react-router-dom'
 import { orgLabel } from '../lib/orgs.js'
 
 // 검증 결과를 단순 O/X로 합치지 않는다 — 5개 체크 항목을 각각 표시하고,
@@ -41,7 +42,15 @@ export default function ResultCard({ result }) {
       <h2>{meta.fileName}</h2>
       <div className="mono">
         SHA-256 {meta.contentHash}
-        {meta.labelSource && <> · 라벨: {meta.labelSource}</>}
+        {meta.labelSource && (
+          <>
+            {' · 이름표: '}
+            <Link to={`/help/formats${meta.formatId ? '#' + meta.formatId : ''}`}
+              title="이 형식의 부착 방식 도움말로 이동">
+              {meta.labelSource}
+            </Link>
+          </>
+        )}
       </div>
 
       <div className="attribution">

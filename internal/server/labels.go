@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/innotium/ledgermarker/internal/attach"
 	"github.com/innotium/ledgermarker/internal/issue"
 	"github.com/innotium/ledgermarker/internal/ledger"
 )
@@ -30,6 +31,17 @@ type IssueRequest struct {
 	Lineage             *LineageDecl `json:"lineage,omitempty"`
 	NotAfterDays        int          `json:"notAfterDays,omitempty"`
 	ExportApprover      string       `json:"exportApprover,omitempty"`
+	// Attach 는 클라이언트가 수행한 부착 결과 보고다 (작업지시서 §2.5·§3.3).
+	// 부착·해시는 클라이언트에서 일어나므로(파일 미전송 원칙) 서버는
+	// 보고를 원장에 기록하고 카탈로그 정보를 덧붙여 회신한다.
+	Attach *AttachDecl `json:"attach,omitempty"`
+}
+
+// AttachDecl 은 부착 결과 선언이다.
+type AttachDecl struct {
+	Method         string `json:"method"`                   // embedded|container|sidecar|ledger_only
+	FormatID       string `json:"formatId"`                 // formats.yaml id (unknown 포함)
+	FallbackReason string `json:"fallbackReason,omitempty"` // not_implemented|attach_failed
 }
 
 // LineageDecl 은 선언적 계보 입력이다.
@@ -40,12 +52,21 @@ type LineageDecl struct {
 
 // IssueResponse 는 201 응답이다.
 type IssueResponse struct {
-	DocGUID   string    `json:"docGuid"`
-	LabelDER  string    `json:"labelDer"` // base64 CMS
-	LedgerSeq int64     `json:"ledgerSeq"`
-	RootDocID string    `json:"rootDocId,omitempty"`
-	IssuedAt  time.Time `json:"issuedAt"`
-	NotAfter  time.Time `json:"notAfter"`
+	DocGUID   string        `json:"docGuid"`
+	LabelDER  string        `json:"labelDer"` // base64 CMS
+	LedgerSeq int64         `json:"ledgerSeq"`
+	RootDocID string        `json:"rootDocId,omitempty"`
+	IssuedAt  time.Time     `json:"issuedAt"`
+	NotAfter  time.Time     `json:"notAfter"`
+	Attach    *AttachResult `json:"attach,omitempty"` // §3.3
+}
+
+// AttachResult 는 부착 결과 회신이다 (survivability는 카탈로그에서 보강).
+type AttachResult struct {
+	Method         string `json:"method"`
+	FormatID       string `json:"formatId"`
+	Survivability  string `json:"survivability,omitempty"`
+	FallbackReason string `json:"fallbackReason,omitempty"`
 }
 
 func (s *Server) handleIssue(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +202,32 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		SignerCertSN:  s.cfg.LabelSigner.SerialNumber(),
 		Actor:         actor,
 	}
+	// 부착 결과 기록 — 폴백 추적 (§2.5). 미보고 시 sidecar/unknown으로 간주.
+	var attachOut *AttachResult
+	{
+		a := req.Attach
+		if a == nil {
+			a = &AttachDecl{Method: string(attach.MethodSidecar), FormatID: attach.UnknownFormat.ID}
+		}
+		switch attach.Method(a.Method) {
+		case attach.MethodEmbedded, attach.MethodContainer, attach.MethodSidecar, attach.MethodLedgerOnly:
+		default:
+			return nil, http.StatusBadRequest, fmt.Errorf("invalid attach.method %q", a.Method)
+		}
+		ev.AttachMethod = a.Method
+		ev.FormatID = a.FormatID
+		ev.FallbackReason = a.FallbackReason
+		attachOut = &AttachResult{
+			Method: a.Method, FormatID: a.FormatID, FallbackReason: a.FallbackReason,
+		}
+		if cat, err := attach.Load(); err == nil {
+			if f := cat.ByID(a.FormatID); f != nil {
+				attachOut.Survivability = f.Survivability
+			} else if a.FormatID == attach.UnknownFormat.ID {
+				attachOut.Survivability = attach.UnknownFormat.Survivability
+			}
+		}
+	}
 	if err := s.writer.Append(ctx, ev); err != nil {
 		return nil, http.StatusServiceUnavailable, fmt.Errorf("ledger append: %w", err)
 	}
@@ -195,6 +242,7 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		RootDocID: rootDocID.String(),
 		IssuedAt:  lbl.IssuedAt,
 		NotAfter:  lbl.NotAfter,
+		Attach:    attachOut,
 	}, 0, nil
 }
 

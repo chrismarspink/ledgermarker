@@ -40,6 +40,13 @@ components:
             transform: { type: string, enum: [edit, convert, merge, extract] }
         notAfterDays: { type: integer, default: 365 }
         exportApprover: { type: string }
+        attach:
+          type: object
+          description: 클라이언트가 수행한 부착 결과 보고 (원장에 기록 — 폴백 추적)
+          properties:
+            method: { type: string, enum: [embedded, container, sidecar, ledger_only] }
+            formatId: { type: string, description: formats.yaml id (unknown 포함) }
+            fallbackReason: { type: string, enum: [not_implemented, attach_failed] }
     IssueResponse:
       type: object
       properties:
@@ -49,6 +56,13 @@ components:
         rootDocId: { type: string, format: uuid }
         issuedAt: { type: string, format: date-time }
         notAfter: { type: string, format: date-time }
+        attach:
+          type: object
+          properties:
+            method: { type: string }
+            formatId: { type: string }
+            survivability: { type: string, enum: [A, B, C] }
+            fallbackReason: { type: string }
     VerifyRequest:
       type: object
       required: [contentHash]
@@ -194,6 +208,27 @@ paths:
       responses:
         "200":
           description: '{ok, badSeq, checked}'
+  /formats:
+    get:
+      summary: 포맷 카탈로그 (단일 진실 원천 formats.yaml — 공개, ETag 캐시)
+      responses:
+        "200": { description: "{version, generatedAt, formats[]}" }
+        "304": { description: 변경 없음 (If-None-Match) }
+  /formats/resolve:
+    post:
+      summary: 단일 파일 판정 — 파일 미업로드 (파일명 + 앞 16바이트 매직만)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename]
+              properties:
+                filename: { type: string }
+                magicHex: { type: string, description: 파일 앞부분 hex (최대 16바이트) }
+      responses:
+        "200": { description: 포맷 정보 + 실제 적용 방식 + 폴백 사유 }
   /trust/list:
     get:
       summary: 신뢰목록 (PWA 오프라인 캐시 대상 — 자기 CA + 파트너 CA + 폐기 인증서 SN)

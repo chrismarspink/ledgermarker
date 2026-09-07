@@ -82,6 +82,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/checkpoints/latest", s.handleLatestCheckpoint)
 	mux.HandleFunc("GET /v1/trust/list", s.handleTrustList)
 	mux.HandleFunc("GET /v1/keys", s.handleKeys)         // 공개키·인증서만 노출
+	mux.HandleFunc("GET /v1/formats", s.handleFormats)   // 포맷 카탈로그 (공개, 캐시 대상)
+	mux.HandleFunc("POST /v1/formats/resolve", s.handleFormatsResolve)
 	mux.HandleFunc("GET /v1/treaties", s.handleTreaties) // 등가성 협정 (여권 정책)
 
 	// 비공개 (발급·운영)

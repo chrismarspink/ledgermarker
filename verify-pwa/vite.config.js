@@ -34,6 +34,12 @@ export default defineConfig({
             urlPattern: ({ url }) => url.pathname === '/v1/checkpoints/latest',
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'lm-checkpoint' }
+          },
+          {
+            // 포맷 카탈로그: 도움말 오프라인 렌더링용 (H2)
+            urlPattern: ({ url }) => url.pathname === '/v1/formats',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'lm-formats' }
           }
         ]
       }

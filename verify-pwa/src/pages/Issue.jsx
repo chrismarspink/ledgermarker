@@ -1,8 +1,9 @@
 import React from 'react'
-import { sha256Hex, sha256HexBytes } from '../lib/hash.js'
 import { api } from '../lib/api.js'
-import { extractEmbedded, embedLabel } from '../lib/embed.js'
+import { analyzeFile, buildEmbedded } from '../lib/attach.js'
 import { orgLabel } from '../lib/orgs.js'
+import { METHOD_KO } from './Help.jsx'
+import { Link } from 'react-router-dom'
 
 // 라벨 발급 페이지 — 파일에 라벨을 내장(트레일러 방식)해 내려준다.
 // 파일 본문은 서버로 전송하지 않는다: 해시만 보내고, 서명(라벨)만 받아
@@ -32,16 +33,30 @@ export default function IssuePage() {
     try {
       localStorage.setItem('lm-api-key', apiKey)
       const buf = await file.arrayBuffer()
-      if (extractEmbedded(buf)) {
-        throw new Error('이 파일에는 이미 라벨이 내장되어 있습니다. 재발급하려면 원본(라벨 제거본)을 사용하세요.')
+      // 포맷 카탈로그 기반 분석 — 해시 대상(라벨 제외·필요 시 정규화) 계산
+      const analysis = await analyzeFile(file.name, buf)
+      if (analysis.labelDerBytes) {
+        throw new Error('이 파일에는 이미 이름표가 붙어 있습니다. 재발급하려면 원본(이름표 제거본)을 사용하세요.')
       }
-      const contentHash = await sha256Hex(file)
+      const format = analysis.format
+      const contentHash = analysis.contentHash
+
+      // 부착 방식 결정 (폴백 규칙): 지원 내장 → 파일 안에, 준비 중 → 사이드카
+      let method = 'sidecar'
+      let fallbackReason = ''
+      const canEmbed = format.method === 'embedded' && format.status === 'supported'
+      if (canEmbed) {
+        method = 'embedded'
+      } else if (format.method === 'embedded' || format.method === 'container') {
+        fallbackReason = 'not_implemented'
+      }
 
       const payload = {
         contentHash,
         grade: form.grade,
         approvalState: form.approvalState,
-        notAfterDays: Number(form.notAfterDays) || 365
+        notAfterDays: Number(form.notAfterDays) || 365,
+        attach: { method, formatId: format.id, fallbackReason }
       }
       if (form.basisClause) payload.basisClause = Number(form.basisClause)
       if (form.keywords.trim()) {
@@ -49,25 +64,24 @@ export default function IssuePage() {
       }
       if (form.brmPath.trim()) payload.brmPath = form.brmPath.trim()
       if (parentFile) {
-        // 부모가 라벨 내장 파일이면 트레일러를 떼고 원본 부분을 해시한다 —
-        // 원장에는 원본 기준 해시가 등록되어 있다.
-        const pbuf = await parentFile.arrayBuffer()
-        const pEmbedded = extractEmbedded(pbuf)
-        const parentHash = pEmbedded
-          ? await sha256HexBytes(pEmbedded.original)
-          : await sha256HexBytes(pbuf)
-        payload.lineage = { parentHash, transform: form.transform }
+        // 부모 해시도 라벨 제외 본문 기준으로 계산한다 —
+        // 원장에는 그 기준 해시가 등록되어 있다.
+        const pAnalysis = await analyzeFile(parentFile.name, await parentFile.arrayBuffer())
+        payload.lineage = { parentHash: pAnalysis.contentHash, transform: form.transform }
       }
 
       const res = await api.issue(payload, apiKey, 'web:' + contentHash)
 
-      // 라벨 내장 파일 생성 (원본 + DER + 트레일러)
+      // 내장 라벨 파일 생성 (형식별 방식 — 준비 중 형식은 사이드카만)
       const der = Uint8Array.from(atob(res.labelDer), (c) => c.charCodeAt(0))
-      const labeled = embedLabel(new Uint8Array(buf), der)
+      const labeled = canEmbed ? buildEmbedded(format, file.name, buf, der) : null
       setDone({
         res,
+        format,
+        method,
+        fallbackReason,
         fileName: file.name,
-        labeledUrl: URL.createObjectURL(labeled),
+        labeledUrl: labeled ? URL.createObjectURL(labeled) : null,
         sidecarUrl: URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' }))
       })
     } catch (e) {
@@ -164,22 +178,31 @@ export default function IssuePage() {
           <div className="mono">
             docGuid {done.res.docGuid} · 원장 seq {done.res.ledgerSeq}
             <br />유효기간 ~ {new Date(done.res.notAfter).toLocaleDateString('ko-KR')}
+            <br />형식: {done.format.name} · 붙이는 방법:{' '}
+            <Link to={`/help/formats#${done.format.id}`}>{METHOD_KO[done.method]}</Link>
           </div>
-          <p>
-            <a className="download" href={done.labeledUrl} download={done.fileName}>
-              ⬇ 라벨 내장 파일 받기 — {done.fileName}
-            </a>
-          </p>
+          {done.labeledUrl ? (
+            <p>
+              <a className="download" href={done.labeledUrl} download={done.fileName}>
+                ⬇ 이름표 내장 파일 받기 — {done.fileName}
+              </a>
+            </p>
+          ) : (
+            <p className="hint">
+              {done.fallbackReason === 'not_implemented'
+                ? '이 형식은 파일 안에 넣는 방식이 준비 중이라, 지금은 옆에 별도 파일(.lmsig)로 붙입니다.'
+                : '이 형식은 옆에 별도 파일(.lmsig)로 붙입니다.'}
+              {done.format.warning && <> ⚠ {done.format.warning}</>}
+            </p>
+          )}
           <p>
             <a href={done.sidecarUrl} download={done.fileName + '.lmsig'}>
-              사이드카(.lmsig)로도 받기
+              {done.labeledUrl ? '사이드카(.lmsig)로도 받기' : '⬇ 이름표 파일(.lmsig) 받기 — 문서와 함께 보관하세요'}
             </a>
           </p>
           <p className="hint">
-            내장 파일은 원본 뒤에 라벨 트레일러를 덧붙인 것입니다(원본 내용 불변).
-            검증 화면과 lm CLI가 자동 인식합니다. PDF·JPEG 등은 그대로 열리며,
-            일부 엄격한 ZIP 리더(docx/hwpx)는 경고할 수 있습니다 — 포맷별 정식
-            내장은 Phase 2.
+            발급 사실은 항상 대장에 기록되므로, 이름표가 사라져도 문서를 알아볼 수
+            있습니다. 형식별 자세한 내용은 <Link to="/help/formats">도움말 › 파일 형식별 지원</Link>.
           </p>
         </div>
       )}
@@ -205,9 +228,7 @@ function LifecycleSection({ apiKey }) {
   async function lookup(file) {
     setMsg(null); setTarget(null); setAction(''); setBusy(true)
     try {
-      const buf = await file.arrayBuffer()
-      const emb = extractEmbedded(buf)
-      const contentHash = emb ? await sha256HexBytes(emb.original) : await sha256HexBytes(buf)
+      const { contentHash } = await analyzeFile(file.name, await file.arrayBuffer())
       const res = await api.verify({ contentHash, level: 2 })
       if (!res.attribution?.docGuid) {
         throw new Error(`원장에서 문서를 찾지 못했습니다 (ledger=${res.checks.ledger})`)

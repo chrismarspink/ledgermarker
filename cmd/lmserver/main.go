@@ -12,6 +12,7 @@ import (
 
 	"encoding/json"
 
+	"github.com/innotium/ledgermarker/internal/attach"
 	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
 	"github.com/innotium/ledgermarker/internal/server"
 	"github.com/innotium/ledgermarker/internal/store"
@@ -32,6 +33,13 @@ func main() {
 	var apiKeys []string
 	if v := os.Getenv("LM_API_KEYS"); v != "" {
 		apiKeys = strings.Split(v, ",")
+	}
+
+	// 포맷 카탈로그 검증 — id·확장자 중복, embedded인데 location 없음 등은
+	// 기동 실패로 처리한다 (작업지시서 §1.4, A6·A7).
+	if _, err := attach.Load(); err != nil {
+		log.Error("format catalog invalid", "err", err)
+		os.Exit(1)
 	}
 
 	ks, err := softhsm.Open(keystoreDir, issuerOrg)

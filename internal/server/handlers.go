@@ -195,6 +195,15 @@ func (s *Server) handleLedgerEvents(w http.ResponseWriter, r *http.Request) {
 		if e.Reason != "" {
 			row["reason"] = e.Reason
 		}
+		if e.AttachMethod != "" {
+			row["attachMethod"] = e.AttachMethod
+		}
+		if e.FormatID != "" {
+			row["formatId"] = e.FormatID
+		}
+		if e.FallbackReason != "" {
+			row["fallbackReason"] = e.FallbackReason
+		}
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{

@@ -8,6 +8,7 @@ import LedgerPage from './pages/Ledger.jsx'
 import LineagePage from './pages/Lineage.jsx'
 import AdminPage from './pages/Admin.jsx'
 import KeysPage from './pages/Keys.jsx'
+import HelpPage from './pages/Help.jsx'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -24,6 +25,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           {/* 공격 시나리오는 검증 화면에 통합됨 — 구 경로 호환 */}
           <Route path="/attack" element={<VerifyPage />} />
           <Route path="/lineage/:docGuid" element={<LineagePage />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/help/:section" element={<HelpPage />} />
           {/* 구 경로 호환 */}
           <Route path="/admin" element={<AdminPage />} />
         </Route>

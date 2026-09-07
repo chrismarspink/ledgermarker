@@ -5,14 +5,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,49 +20,39 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	"github.com/innotium/ledgermarker/internal/attach"
+
 	gatesdk "github.com/innotium/ledgermarker/sdk/go"
 
 	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
 )
 
-const sidecarExt = ".lmsig" // 사이드카 파일명: <원본파일명>.lmsig (DER)
+// sidecarExt: 사이드카 파일명 <원본파일명>.lmsig (DER).
+// 부착·추출·해시 대상 계산은 전부 internal/attach(포맷 카탈로그 기반)가
+// 담당한다 — 포맷 정보의 진실 원천은 formats.yaml 하나다.
+const sidecarExt = attach.SidecarExt
 
-// 라벨 트레일러 내장 형식 (docs/label-profile.md 부록):
-//
-//	[원본][CMS DER][DER 길이 uint64 BE][매직 "LMLABEL1"]
-//
-// contentHash는 항상 원본 바이트 기준이다.
-const embedMagic = "LMLABEL1"
-
-// splitEmbedded 는 트레일러가 있으면 (원본, DER, true)를 반환한다.
-func splitEmbedded(data []byte) (orig, der []byte, ok bool) {
-	n := len(data)
-	if n < 20 || string(data[n-8:]) != embedMagic {
-		return nil, nil, false
+// resolveFile 은 파일을 읽고 카탈로그로 Attacher를 해석한다.
+func resolveFile(path string) ([]byte, attach.Attacher, attach.Resolution, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, attach.Resolution{}, fmt.Errorf("파일 읽기 %s: %w", path, err)
 	}
-	derLen := binary.BigEndian.Uint64(data[n-16 : n-8])
-	if derLen == 0 || derLen > uint64(n-16) {
-		return nil, nil, false
+	head := data
+	if len(head) > 16 {
+		head = head[:16]
 	}
-	cut := n - 16 - int(derLen)
-	return data[:cut], data[cut : n-16], true
+	a, res := attach.Resolve(path, head)
+	return data, a, res, nil
 }
 
-// appendTrailer 는 파일 끝에 라벨 트레일러를 덧붙인다 (원본 내용 불변).
-func appendTrailer(path string, der []byte) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+// hashTargetHex 는 라벨을 제외한 본문 해시(hex)를 계산한다.
+func hashTargetHex(a attach.Attacher, data []byte) (string, error) {
+	h, err := a.HashTarget(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer f.Close()
-	lenBuf := make([]byte, 8)
-	binary.BigEndian.PutUint64(lenBuf, uint64(len(der)))
-	for _, b := range [][]byte{der, lenBuf, []byte(embedMagic)} {
-		if _, err := f.Write(b); err != nil {
-			return err
-		}
-	}
-	return nil
+	return hex.EncodeToString(h), nil
 }
 
 var (
@@ -111,66 +99,108 @@ func cmdIssue() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			path := args[0]
-			data, err := os.ReadFile(path)
+			data, attacher, res, err := resolveFile(path)
 			if err != nil {
-				return fmt.Errorf("파일 읽기: %w", err)
+				return err
 			}
-			if _, _, ok := splitEmbedded(data); ok {
-				return fmt.Errorf("%s 에는 이미 라벨이 내장되어 있습니다 (lm verify로 확인)", path)
+			// 재부착 방지: 이미 라벨이 있는가
+			if _, err := attacher.Extract(bytes.NewReader(data), int64(len(data))); err == nil {
+				return fmt.Errorf("%s 에는 이미 라벨이 부착되어 있습니다 (lm verify로 확인)", path)
 			}
-			if !embed {
-				if _, err := os.Stat(path + sidecarExt); err == nil && !force {
-					return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
-				}
+			hash, err := hashTargetHex(attacher, data)
+			if err != nil {
+				return fmt.Errorf("해시 대상 계산: %w", err)
 			}
-			sum := sha256.Sum256(data)
-			hash := hex.EncodeToString(sum[:])
 			req.ContentHash = hash
 			if approval != "" {
 				req.ApprovalState = strings.ToUpper(approval)
 			}
-			// --parent: 부모 파일 경로 또는 64자 hex 해시 → 선언적 계보
+			// --parent: 부모 파일 경로 또는 64자 hex 해시 → 선언적 계보.
+			// 부모의 해시도 라벨 제외 본문 기준(HashTarget)으로 계산한다.
 			if parent != "" {
 				ph := parent
 				if len(parent) != 64 {
-					// 부모가 라벨 내장 파일이면 트레일러를 뗀 원본 기준으로
-					// 해시한다 — 원장 등록 해시와 일치해야 계보가 이어진다.
-					pdata, err := os.ReadFile(parent)
+					pdata, pa, _, err := resolveFile(parent)
 					if err != nil {
-						return fmt.Errorf("부모 파일 읽기: %w", err)
+						return err
 					}
-					if porig, _, ok := splitEmbedded(pdata); ok {
-						pdata = porig
+					if ph, err = hashTargetHex(pa, pdata); err != nil {
+						return fmt.Errorf("부모 해시: %w", err)
 					}
-					psum := sha256.Sum256(pdata)
-					ph = hex.EncodeToString(psum[:])
 				}
 				if req.Lineage == nil {
 					req.Lineage = &gatesdk.LineageDecl{}
 				}
 				req.Lineage.ParentHash = ph
 			}
+
+			// ── 부착 방식 결정 (발급 전에 확정해 원장에 기록) ──
+			method := res.Method
+			reason := res.FallbackReason
+			var preflight bytes.Buffer // 내장 사전 검사 결과 (본문 보관)
+			embedOK := false
+			switch {
+			case !embed:
+				// 사용자가 내장을 요청하지 않음 → 사이드카 (폴백 아님)
+				if method != attach.MethodLedgerOnly {
+					method, reason = attach.MethodSidecar, ""
+				}
+			case res.Method == attach.MethodSidecar:
+				// 정책상 사이드카 고정 (예: 코드 서명 실행 파일)
+				if res.Format.Warning != "" {
+					fmt.Printf("주의: %s\n", res.Format.Warning)
+				}
+				if res.FallbackReason == "" {
+					fmt.Printf("이 형식(%s)은 사이드카 방식만 지원합니다\n", res.Format.Name)
+				} else {
+					fmt.Printf("이 형식(%s)의 내장은 준비 중 — 사이드카로 폴백합니다\n", res.Format.Name)
+				}
+			default:
+				// 내장 사전 검사(더미 라벨) — 실패해도 발급은 사이드카로 계속 (§2.2-3)
+				if err := attacher.Attach(bytes.NewReader(data), &preflight, []byte{0x30}); err != nil {
+					fmt.Printf("내장 시도 실패(%v) — 사이드카로 폴백합니다\n", err)
+					attacher, res = attach.FallbackToSidecar(res)
+					method, reason = res.Method, res.FallbackReason
+				} else {
+					embedOK = true
+				}
+			}
+			req.Attach = &gatesdk.AttachDecl{
+				Method: string(method), FormatID: res.Format.ID, FallbackReason: reason,
+			}
+
 			resp, err := client().IssueLabel(context.Background(), req, "issue:"+hash)
 			if err != nil {
 				return err
 			}
-			if embed {
-				der, err := base64.StdEncoding.DecodeString(resp.LabelDER)
-				if err != nil {
-					return fmt.Errorf("labelDer 디코드: %w", err)
+			der, err := base64.StdEncoding.DecodeString(resp.LabelDER)
+			if err != nil {
+				return fmt.Errorf("labelDer 디코드: %w", err)
+			}
+			if embedOK {
+				var out bytes.Buffer
+				if err := attacher.Attach(bytes.NewReader(data), &out, der); err != nil {
+					return fmt.Errorf("내장: %w", err)
 				}
-				if err := appendTrailer(path, der); err != nil {
-					return fmt.Errorf("트레일러 내장: %w", err)
+				if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+					return fmt.Errorf("파일 쓰기: %w", err)
 				}
-				fmt.Printf("발급 완료 (파일에 내장): %s\n", path)
+				fmt.Printf("발급 완료 (파일에 내장 — %s): %s\n", res.Format.Location, path)
 			} else {
+				if _, err := os.Stat(path + sidecarExt); err == nil && !force {
+					return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
+				}
 				if err := writeSidecar(path, resp.LabelDER); err != nil {
 					return fmt.Errorf("사이드카 쓰기: %w", err)
 				}
 				fmt.Printf("발급 완료: %s%s\n", path, sidecarExt)
 			}
-			fmt.Printf("  docGuid=%s seq=%d 등급=%s 유효기간=%s\n",
-				resp.DocGUID, resp.LedgerSeq, req.Grade, resp.NotAfter.Format("2006-01-02"))
+			fmt.Printf("  docGuid=%s seq=%d 등급=%s 유효기간=%s 형식=%s(%s)\n",
+				resp.DocGUID, resp.LedgerSeq, req.Grade,
+				resp.NotAfter.Format("2006-01-02"), res.Format.ID, method)
+			if reason != "" {
+				fmt.Printf("  폴백 사유=%s (원장에 기록됨)\n", reason)
+			}
 			if resp.RootDocID != "" && resp.RootDocID != resp.DocGUID {
 				fmt.Printf("  최초 조상=%s\n", resp.RootDocID)
 			}
@@ -218,16 +248,25 @@ func cmdScan() *cobra.Command {
 			}
 			issued, failed := 0, 0
 			for _, path := range files {
-				hash, err := hashFile(path)
+				data, attacher, res, err := resolveFile(path)
+				if err != nil {
+					fmt.Printf("SKIP %s: %v\n", path, err)
+					continue
+				}
+				hash, err := hashTargetHex(attacher, data)
 				if err != nil {
 					fmt.Printf("SKIP %s: %v\n", path, err)
 					continue
 				}
 				if !issueFlag {
-					fmt.Printf("%s  %s\n", hash, path)
+					fmt.Printf("%s  %s  [%s]\n", hash, path, res.Format.ID)
 					continue
 				}
-				req := gatesdk.IssueRequest{ContentHash: hash, Grade: grade, NotAfterDays: notAfterDays}
+				req := gatesdk.IssueRequest{
+					ContentHash: hash, Grade: grade, NotAfterDays: notAfterDays,
+					// scan은 사이드카 일괄 부착 — 폴백 아님
+					Attach: &gatesdk.AttachDecl{Method: string(attach.MethodSidecar), FormatID: res.Format.ID},
+				}
 				// 해시를 멱등키로 써서 재실행해도 원장 행이 중복되지 않게 한다
 				resp, err := client().IssueLabel(context.Background(), req, "scan:"+hash)
 				if err != nil {
@@ -265,22 +304,21 @@ func cmdVerify() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			exit := 0
 			for _, path := range args {
-				data, err := os.ReadFile(path)
+				data, attacher, _, err := resolveFile(path)
 				if err != nil {
-					return fmt.Errorf("파일 읽기 %s: %w", path, err)
+					return err
 				}
 				req := gatesdk.VerifyRequest{Level: level}
-				if orig, embDer, ok := splitEmbedded(data); ok {
-					// 라벨 내장 파일: 트레일러를 떼고 원본 부분만 해시
-					sum := sha256.Sum256(orig)
-					req.ContentHash = hex.EncodeToString(sum[:])
-					req.LabelDER = base64.StdEncoding.EncodeToString(embDer)
-				} else {
-					sum := sha256.Sum256(data)
-					req.ContentHash = hex.EncodeToString(sum[:])
-					if der, err := os.ReadFile(path + sidecarExt); err == nil {
-						req.LabelDER = base64.StdEncoding.EncodeToString(der)
-					}
+				// 해시 대상은 항상 "라벨 제외 본문" (포맷별 정규화 포함)
+				req.ContentHash, err = hashTargetHex(attacher, data)
+				if err != nil {
+					return fmt.Errorf("해시 대상 계산 %s: %w", path, err)
+				}
+				// 내장 라벨 우선, 없으면 사이드카
+				if der, err := attacher.Extract(bytes.NewReader(data), int64(len(data))); err == nil {
+					req.LabelDER = base64.StdEncoding.EncodeToString(der)
+				} else if der, err := os.ReadFile(path + sidecarExt); err == nil {
+					req.LabelDER = base64.StdEncoding.EncodeToString(der)
 				}
 				res, err := client().Verify(context.Background(), req)
 				if err != nil {
@@ -332,9 +370,13 @@ func cmdLineage() *cobra.Command {
 			docGUID := args[0]
 			if _, err := uuid.Parse(docGUID); err != nil {
 				// 파일이면 해시 → 폴백 검증으로 docGuid 귀속
-				hash, err := hashFile(args[0])
+				data, attacher, _, err := resolveFile(args[0])
 				if err != nil {
 					return fmt.Errorf("docGuid도 파일도 아닙니다: %s", args[0])
+				}
+				hash, err := hashTargetHex(attacher, data)
+				if err != nil {
+					return err
 				}
 				res, err := client().Verify(context.Background(), gatesdk.VerifyRequest{ContentHash: hash, Level: 2})
 				if err != nil {
@@ -642,19 +684,6 @@ func cmdTrust() *cobra.Command {
 }
 
 // ── 헬퍼 ───────────────────────────────────────────────────
-
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
 
 func listFiles(dir string, recursive bool) ([]string, error) {
 	var out []string

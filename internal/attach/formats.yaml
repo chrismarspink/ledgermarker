@@ -1,0 +1,245 @@
+# 포맷 카탈로그 — 단일 진실 원천 (작업지시서 §1)
+#
+# Attacher 등록·API 응답(/v1/formats)·도움말 화면이 전부 이 파일에서
+# 파생된다. 같은 정보를 코드나 문서에 두 번 쓰지 않는다.
+#
+# ✎ 주의: 선행 문서 `LedgerMarker_포맷별_라벨부착_방식.md`(3절 A~J)가
+# 저장소에 없어, 작업지시서 §1.2 예시와 통상 포맷군으로 구성했다.
+# 해당 문서 입수 시 이 파일과 대조·갱신할 것.
+#
+# method:        embedded | container | sidecar | ledger_only
+# survivability: A(잘 붙음) | B(같이 옮겨야 함) | C(대장 조회 필요)
+# status:        supported | planned | unsupported
+version: 1
+formats:
+  # ── 텍스트 계열 ─────────────────────────────────────────
+  - id: markdown
+    name: 마크다운
+    extensions: [".md", ".markdown"]
+    mime: ["text/markdown"]
+    magic: null
+    method: embedded
+    location: "YAML front matter (lm_* 키)"
+    survivability: A
+    status: supported
+    phase: "1-a"
+    normalize: true
+    notes: null
+    warning: null
+
+  - id: plaintext
+    name: 일반 텍스트 (txt·log·csv)
+    extensions: [".txt", ".log", ".csv"]
+    mime: ["text/plain", "text/csv"]
+    magic: null
+    method: sidecar
+    location: null
+    survivability: B
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "본문에 표식을 넣으면 내용이 변하므로 사이드카를 쓴다"
+    warning: null
+
+  # ── PDF·이미지 (꼬리 데이터 허용 포맷 — 트레일러 내장) ────
+  - id: pdf
+    name: PDF 문서
+    extensions: [".pdf"]
+    mime: ["application/pdf"]
+    magic: "25504446"           # %PDF
+    method: embedded
+    location: "파일 끝 LMLABEL1 트레일러 (증분 갱신 내장은 Phase 2)"
+    survivability: A
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "재저장(다른 이름으로 저장) 시 트레일러가 소실될 수 있다"
+    warning: null
+
+  - id: jpeg
+    name: JPEG 이미지
+    extensions: [".jpg", ".jpeg"]
+    mime: ["image/jpeg"]
+    magic: "FFD8FF"
+    method: embedded
+    location: "파일 끝 LMLABEL1 트레일러"
+    survivability: A
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "이미지 편집·재저장 시 소실"
+    warning: null
+
+  - id: png
+    name: PNG 이미지
+    extensions: [".png"]
+    mime: ["image/png"]
+    magic: "89504E47"
+    method: embedded
+    location: "파일 끝 LMLABEL1 트레일러"
+    survivability: A
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "이미지 편집·재저장 시 소실"
+    warning: null
+
+  # ── 오피스·컨테이너 (Phase 1-b: zipAttacher·cfbAttacher) ──
+  - id: ooxml
+    name: MS 오피스 문서 (워드·엑셀·파워포인트)
+    extensions: [".docx", ".xlsx", ".pptx"]
+    mime: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+    magic: "504B0304"
+    method: container
+    location: "OPC customXml 파트 (LMLabel.xml)"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: "MS Office 재저장 시 미지 customXml 파트 보존 여부 버전별 실측 필요 ✎"
+    warning: null
+
+  - id: hwpx
+    name: 한글 문서 (개방형)
+    extensions: [".hwpx"]
+    mime: ["application/hwp+zip"]
+    magic: "504B0304"
+    method: container
+    location: "ZIP 내 별도 엔트리 (META-INF/lmlabel.der)"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: null
+    warning: null
+
+  - id: hwp
+    name: 한글 문서
+    extensions: [".hwp"]
+    mime: ["application/x-hwp", "application/haansofthwp"]
+    magic: "D0CF11E0A1B11AE1"   # CFB 시그니처
+    method: container
+    location: "CFB 스토리지 내 LMLabel 스트림"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: "한글 프로그램 재저장 시 스트림 보존 여부 실측 필요 ✎"
+    warning: null
+
+  - id: odf
+    name: 오픈 문서 (ODF)
+    extensions: [".odt", ".ods", ".odp"]
+    mime: ["application/vnd.oasis.opendocument.text"]
+    magic: "504B0304"
+    method: container
+    location: "ZIP 내 별도 엔트리 (META-INF/lmlabel.der)"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: null
+    warning: null
+
+  - id: zip
+    name: 압축 파일 (ZIP·JAR)
+    extensions: [".zip", ".jar"]
+    mime: ["application/zip"]
+    magic: "504B0304"
+    method: container
+    location: "ZIP 코멘트 또는 별도 엔트리"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: null
+    warning: null
+
+  # ── 실행 파일 — 사이드카 고정 (§6-6) ──────────────────────
+  - id: pe
+    name: 윈도우 실행 파일
+    extensions: [".exe", ".dll"]
+    mime: ["application/vnd.microsoft.portable-executable"]
+    magic: "4D5A"
+    method: sidecar
+    location: null
+    survivability: B
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "리소스 섹션 내장은 코드 서명 이전 단계에서만 가능"
+    warning: "코드 서명된 파일에는 내장하지 않습니다. 서명이 깨집니다."
+
+  # ── 미디어 ────────────────────────────────────────────────
+  - id: media
+    name: 영상·음성 (MP4·MP3 등)
+    extensions: [".mp4", ".m4a", ".mp3", ".wav", ".avi"]
+    mime: ["video/mp4", "audio/mpeg"]
+    magic: null
+    method: sidecar
+    location: null
+    survivability: B
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "일부 플레이어가 꼬리 데이터를 거부해 사이드카를 쓴다"
+    warning: null
+
+  # ── 이메일 ────────────────────────────────────────────────
+  - id: eml
+    name: 이메일 (EML)
+    extensions: [".eml"]
+    mime: ["message/rfc822"]
+    magic: null
+    method: sidecar
+    location: null
+    survivability: B
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: null
+    warning: null
+
+  - id: msg
+    name: 아웃룩 메일 (MSG)
+    extensions: [".msg"]
+    mime: ["application/vnd.ms-outlook"]
+    magic: "D0CF11E0A1B11AE1"
+    method: container
+    location: "CFB 스토리지 내 LMLabel 스트림"
+    survivability: A
+    status: planned
+    phase: "1-b"
+    normalize: false
+    notes: null
+    warning: null
+
+  # ── 기타 압축 ─────────────────────────────────────────────
+  - id: archive
+    name: 기타 압축 (GZ·7Z·TAR)
+    extensions: [".gz", ".7z", ".tar"]
+    mime: ["application/gzip", "application/x-7z-compressed"]
+    magic: null
+    method: sidecar
+    location: null
+    survivability: B
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: null
+    warning: null
+
+  # ── 비파일 대상 — 원장에만 기록 ───────────────────────────
+  - id: nonfile
+    name: 비파일 대상 (DB 레코드·로그 스트림·화면 출력)
+    extensions: []
+    mime: []
+    magic: null
+    method: ledger_only
+    location: null
+    survivability: C
+    status: supported
+    phase: "1-a"
+    normalize: false
+    notes: "파일 실체가 없어 부착 불가 — 해시·메타데이터만 대장에 기록"
+    warning: null

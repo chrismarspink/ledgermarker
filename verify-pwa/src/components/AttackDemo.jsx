@@ -1,7 +1,7 @@
 import React from 'react'
-import { sha256HexBytes, bytesToBase64 } from '../lib/hash.js'
+import { bytesToBase64 } from '../lib/hash.js'
 import { api } from '../lib/api.js'
-import { extractEmbedded } from '../lib/embed.js'
+import { analyzeFile } from '../lib/attach.js'
 import ResultCard from './ResultCard.jsx'
 
 // 공격 시나리오 시연 (검증 화면 내장) — 방금 검증한 파일의 사본에
@@ -89,28 +89,29 @@ export default function AttackDemo({ doc, sig }) {
 
 async function runScenarios(doc, sig) {
   const buf = new Uint8Array(await doc.arrayBuffer())
-  let original = buf
-  let der = null
-  const emb = extractEmbedded(buf.buffer)
-  if (emb) { original = emb.original; der = emb.der }
+  // 포맷 카탈로그 기반 분석 — 해시 대상·내장 라벨을 형식에 맞게 처리
+  const analysis = await analyzeFile(doc.name, buf.buffer)
+  const baseHash = analysis.contentHash
+  let der = analysis.labelDerBytes
   if (sig) der = new Uint8Array(await sig.arrayBuffer())
   if (!der) {
     throw new Error('라벨이 필요합니다 — 라벨 내장 파일이거나 .lmsig를 함께 놓아야 합니다')
   }
 
+  const { hashBody } = await import('../lib/attach.js')
   const scenarios = [{
     title: '변조 없음 (기준선)',
     desc: '원본 그대로 검증합니다. 서명 valid · 원장 registered가 나와야 합니다.',
-    content: original, der, expectDeny: false
+    hash: baseHash, der, expectDeny: false
   }]
 
-  const tampered = original.slice()
+  const tampered = analysis.bodyBytes.slice()
   const mid = Math.floor(tampered.length / 2)
   tampered[mid] ^= 0x01
   scenarios.push({
     title: '문서 내용 변조',
     desc: `문서 본문 중간(offset ${mid})의 1바이트를 바꿨습니다. 해시가 달라져 라벨의 contentHash 결속이 깨집니다 — 서명 invalid, 원장에도 없는 해시라 unregistered.`,
-    content: tampered, der, expectDeny: true
+    hash: await hashBody(analysis.format, tampered), der, expectDeny: true
   })
 
   const forged = forgeGrade(der)
@@ -118,7 +119,7 @@ async function runScenarios(doc, sig) {
     scenarios.push({
       title: `라벨 등급 위조 (S↔O, ${forged.where})`,
       desc: '라벨 안의 등급 1바이트를 위조했습니다. 등급은 평문이라 읽히지만 signedAttributes 전체가 서명 대상이므로 서명 검증이 반드시 실패합니다 (T1). 진짜 등급은 원장 귀속으로 드러납니다.',
-      content: original, der: forged.der, expectDeny: true
+      hash: baseHash, der: forged.der, expectDeny: true
     })
   }
 
@@ -127,22 +128,21 @@ async function runScenarios(doc, sig) {
   scenarios.push({
     title: '서명값 변조 (서명 위조)',
     desc: '라벨 끝의 ECDSA 서명 바이트를 바꿨습니다 — 서명키 없이 라벨을 조작하려는 시도의 축약형. 암호학적 검증이 실패합니다.',
-    content: original, der: sigForged, expectDeny: true
+    hash: baseHash, der: sigForged, expectDeny: true
   })
 
   scenarios.push({
     title: '라벨 제거 (떼어내기)',
     desc: '라벨을 떼고 문서만 제시했습니다. 서명은 absent지만 원장 폴백 조회로 등급·발급기관이 그대로 귀속됩니다 — 라벨을 없애도 문서의 신원은 숨겨지지 않습니다 (T4).',
-    content: original, der: null, expectDeny: null
+    hash: baseHash, der: null, expectDeny: null
   })
 
   const out = []
   for (const s of scenarios) {
-    const contentHash = await sha256HexBytes(s.content)
-    const payload = { contentHash, level: 2 }
+    const payload = { contentHash: s.hash, level: 2 }
     if (s.der) payload.labelDer = bytesToBase64(s.der)
     const result = await api.verify(payload)
-    result.meta = { fileName: s.title, contentHash }
+    result.meta = { fileName: s.title, contentHash: s.hash }
     let caught = null
     if (s.expectDeny === true) caught = result.verdictHint === 'deny'
     out.push({ title: s.title, desc: s.desc, result, caught })

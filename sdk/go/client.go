@@ -79,6 +79,13 @@ type LineageDecl struct {
 	Transform  string `json:"transform"`
 }
 
+// AttachDecl 은 클라이언트가 수행한 부착 결과 보고다.
+type AttachDecl struct {
+	Method         string `json:"method"` // embedded|container|sidecar|ledger_only
+	FormatID       string `json:"formatId"`
+	FallbackReason string `json:"fallbackReason,omitempty"`
+}
+
 type IssueRequest struct {
 	DocGUID             string       `json:"docGuid,omitempty"`
 	ContentHash         string       `json:"contentHash"`
@@ -92,15 +99,25 @@ type IssueRequest struct {
 	Lineage             *LineageDecl `json:"lineage,omitempty"`
 	NotAfterDays        int          `json:"notAfterDays,omitempty"`
 	ExportApprover      string       `json:"exportApprover,omitempty"`
+	Attach              *AttachDecl  `json:"attach,omitempty"`
+}
+
+// AttachResult 는 발급 응답의 부착 결과다.
+type AttachResult struct {
+	Method         string `json:"method"`
+	FormatID       string `json:"formatId"`
+	Survivability  string `json:"survivability,omitempty"`
+	FallbackReason string `json:"fallbackReason,omitempty"`
 }
 
 type IssueResponse struct {
-	DocGUID   string    `json:"docGuid"`
-	LabelDER  string    `json:"labelDer"`
-	LedgerSeq int64     `json:"ledgerSeq"`
-	RootDocID string    `json:"rootDocId,omitempty"`
-	IssuedAt  time.Time `json:"issuedAt"`
-	NotAfter  time.Time `json:"notAfter"`
+	DocGUID   string        `json:"docGuid"`
+	LabelDER  string        `json:"labelDer"`
+	LedgerSeq int64         `json:"ledgerSeq"`
+	RootDocID string        `json:"rootDocId,omitempty"`
+	IssuedAt  time.Time     `json:"issuedAt"`
+	NotAfter  time.Time     `json:"notAfter"`
+	Attach    *AttachResult `json:"attach,omitempty"`
 }
 
 // IssueLabel 은 라벨을 발급한다. idemKey(Idempotency-Key)는 필수다.
@@ -186,22 +203,25 @@ func (c *Client) LedgerVerify(ctx context.Context, from, to int64) (*LedgerVerif
 
 // LedgerEventRow 는 원장 열람 행이다 (label_der 제외).
 type LedgerEventRow struct {
-	Seq           int64     `json:"seq"`
-	EventType     string    `json:"eventType"`
-	DocGUID       string    `json:"docGuid"`
-	ContentHash   string    `json:"contentHash"`
-	Grade         string    `json:"grade,omitempty"`
-	ApprovalState string    `json:"approvalState,omitempty"`
-	ParentHash    string    `json:"parentHash,omitempty"`
-	RootDocID     string    `json:"rootDocId,omitempty"`
-	Transform     string    `json:"transform,omitempty"`
-	IssuerOrg     string    `json:"issuerOrg"`
-	RevokedRef    int64     `json:"revokedRef,omitempty"`
-	Reason        string    `json:"reason,omitempty"`
-	Actor         string    `json:"actor"`
-	RowHash       string    `json:"rowHash"`
-	PrevHash      string    `json:"prevHash"`
-	CreatedAt     time.Time `json:"createdAt"`
+	Seq            int64     `json:"seq"`
+	EventType      string    `json:"eventType"`
+	DocGUID        string    `json:"docGuid"`
+	ContentHash    string    `json:"contentHash"`
+	Grade          string    `json:"grade,omitempty"`
+	ApprovalState  string    `json:"approvalState,omitempty"`
+	ParentHash     string    `json:"parentHash,omitempty"`
+	RootDocID      string    `json:"rootDocId,omitempty"`
+	Transform      string    `json:"transform,omitempty"`
+	IssuerOrg      string    `json:"issuerOrg"`
+	RevokedRef     int64     `json:"revokedRef,omitempty"`
+	Reason         string    `json:"reason,omitempty"`
+	Actor          string    `json:"actor"`
+	AttachMethod   string    `json:"attachMethod,omitempty"`
+	FormatID       string    `json:"formatId,omitempty"`
+	FallbackReason string    `json:"fallbackReason,omitempty"`
+	RowHash        string    `json:"rowHash"`
+	PrevHash       string    `json:"prevHash"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type LedgerEventsPage struct {

@@ -50,7 +50,12 @@ type Event struct {
 	RevokedRef    int64 // REVOKE/REGRADE가 가리키는 원 seq, 0 = 없음
 	Reason        string
 	Actor         string
-	PrevHash      []byte
-	RowHash       []byte
-	CreatedAt     time.Time
+	// 부착 방식 기록 (작업지시서 §2.5) — 폴백 추적용.
+	// 행 해시(§3.3 직렬화)에는 포함되지 않는 주석성 필드다.
+	AttachMethod   string // embedded | container | sidecar | ledger_only
+	FormatID       string // formats.yaml 의 id (unknown 포함)
+	FallbackReason string // "" | not_implemented | attach_failed
+	PrevHash       []byte
+	RowHash        []byte
+	CreatedAt      time.Time
 }

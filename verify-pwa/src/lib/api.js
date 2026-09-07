@@ -33,6 +33,10 @@ export const api = {
   latestCheckpoint: () => req('GET', '/v1/checkpoints/latest'),
   keys: () => req('GET', '/v1/keys'),
   treaties: () => req('GET', '/v1/treaties'),
+  formats: () => req('GET', '/v1/formats'),
+  // 파일을 업로드하지 않는다 — 파일명과 앞 16바이트 매직넘버만 (§3.2)
+  formatsResolve: (filename, magicHex) =>
+    req('POST', '/v1/formats/resolve', { filename, magicHex }),
   adminStats: (apiKey) => req('GET', '/v1/admin/stats', null, apiKey),
   ledgerEvents: (apiKey, limit = 50) =>
     req('GET', `/v1/ledger/events?limit=${limit}`, null, apiKey)
