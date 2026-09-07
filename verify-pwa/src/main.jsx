@@ -7,7 +7,6 @@ import IssuePage from './pages/Issue.jsx'
 import LedgerPage from './pages/Ledger.jsx'
 import LineagePage from './pages/Lineage.jsx'
 import AdminPage from './pages/Admin.jsx'
-import AttackPage from './pages/Attack.jsx'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -20,7 +19,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/issue" element={<IssuePage />} />
           <Route path="/ledger" element={<LedgerPage />} />
           <Route path="/verify" element={<VerifyPage />} />
-          <Route path="/attack" element={<AttackPage />} />
+          {/* 공격 시나리오는 검증 화면에 통합됨 — 구 경로 호환 */}
+          <Route path="/attack" element={<VerifyPage />} />
           <Route path="/lineage/:docGuid" element={<LineagePage />} />
           {/* 구 경로 호환 */}
           <Route path="/admin" element={<AdminPage />} />

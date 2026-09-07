@@ -5,6 +5,7 @@ import { ContentInfo, SignedData, Certificate } from 'pkijs'
 
 // OID arc — 서버 internal/issue/label.go 와 반드시 일치 (docs/label-profile.md)
 const B = '1.3.6.1.4.1.55555.53.1'
+export const LM_OID = {}
 const OID = {
   profileVersion: `${B}.1`,
   grade: `${B}.2`,
@@ -24,6 +25,7 @@ const OID = {
   notAfter: `${B}.16`,
   exportApprover: `${B}.17`
 }
+for (const [name, oid] of Object.entries(OID)) LM_OID[oid] = name
 
 function hexOf(view) {
   return [...new Uint8Array(view)].map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -74,7 +76,7 @@ export function parseLabel(der) {
   return label
 }
 
-function pemToCert(pem) {
+export function pemToCert(pem) {
   const b64 = pem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s/g, '')
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
   return Certificate.fromBER(raw.buffer)

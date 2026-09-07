@@ -92,3 +92,32 @@ table.ledger td.mono { font-family: ui-monospace, monospace; font-size: 12px; }
 .badge-caught { font-size: 12px; font-weight: 700; color: var(--ok); background: #e6f4ec; border-radius: 999px; padding: 3px 10px; }
 .badge-missed { font-size: 12px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 999px; padding: 3px 10px; }
 .badge-base { font-size: 12px; font-weight: 700; color: var(--muted); background: #eef1f6; border-radius: 999px; padding: 3px 10px; }
+
+/* 파일 내부 구조 뷰어 */
+.sv-h { font-size: 14px; margin: 20px 0 6px; color: var(--navy); }
+.ftree { list-style: none; padding-left: 8px; font-size: 13px; }
+.ftree ul { list-style: none; padding-left: 22px; border-left: 1px dashed #c3cad6; margin: 6px 0; }
+.ftree li { margin: 5px 0; }
+.ftree .range { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.a1tree { font-family: ui-monospace, monospace; font-size: 12px; background: #fafbfc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.a1kids { padding-left: 18px; border-left: 1px solid var(--line); margin-left: 5px; }
+.a1 summary { cursor: pointer; }
+.a1t { color: var(--navy); font-weight: 700; }
+.a1v { color: #111827; word-break: break-all; }
+.a1l { color: var(--muted); }
+.a1.leaf { padding: 1px 0; }
+.a1.leaf.lm .a1v, .a1.leaf.lm .a1t { color: var(--warn); }
+
+/* 서명·키 체인 가시화 */
+.keychain { font-size: 13px; }
+.keybox { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #fafbfc; }
+.keybox.ca { border-color: var(--navy); }
+.keybox.signer { border-color: var(--ok); }
+.keybox.sig { border-color: var(--warn); }
+.keybox-title { font-weight: 700; margin-bottom: 6px; }
+.keybox-body { display: flex; flex-direction: column; gap: 4px; }
+.keybox-body .mono { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; color: #111827; }
+.keyarrow { color: var(--muted); font-size: 12px; padding: 4px 0 4px 22px; }
+.keytag { font-size: 12px; border-radius: 999px; padding: 2px 10px; width: fit-content; }
+.keytag.private { background: #fdecec; color: var(--bad); }
+.keytag.public { background: #e6f4ec; color: var(--ok); }

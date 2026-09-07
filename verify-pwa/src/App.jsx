@@ -23,7 +23,6 @@ export default function App() {
           <NavLink to="/issue">생성</NavLink>
           <NavLink to="/ledger">원장</NavLink>
           <NavLink to="/verify">검증</NavLink>
-          <NavLink to="/attack">공격 시나리오</NavLink>
         </nav>
         <span className={online ? 'badge online' : 'badge offline'}>
           {online ? '온라인' : '오프라인 — 로컬(L1) 검증만 가능'}

@@ -5,6 +5,8 @@ import { api, getTrustListCached } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
 import { extractEmbedded } from '../lib/embed.js'
 import ResultCard from '../components/ResultCard.jsx'
+import StructureView from '../components/StructureView.jsx'
+import AttackDemo from '../components/AttackDemo.jsx'
 
 export default function VerifyPage() {
   const [drag, setDrag] = React.useState(false)
@@ -12,6 +14,7 @@ export default function VerifyPage() {
   const [error, setError] = React.useState('')
   const [result, setResult] = React.useState(null)
   const [scanOpen, setScanOpen] = React.useState(false)
+  const [pair, setPair] = React.useState({ doc: null, sig: null })
   const inputRef = React.useRef()
 
   async function handleFiles(fileList) {
@@ -21,6 +24,7 @@ export default function VerifyPage() {
     const doc = files.find((f) => !f.name.endsWith('.lmsig'))
     const sig = files.find((f) => f.name.endsWith('.lmsig'))
     if (!doc && !sig) return
+    setPair({ doc, sig })
     setBusy(true)
     try {
       setResult(await runVerify(doc, sig))
@@ -66,6 +70,10 @@ export default function VerifyPage() {
               <Link to={`/lineage/${result.attribution.docGuid}`}>이 문서의 가계도(계보) 보기 →</Link>
             </p>
           )}
+          <StructureView structure={result.meta?.structure} />
+          {pair.doc && result.meta?.structure?.derBytes && (
+            <AttackDemo doc={pair.doc} sig={pair.sig} />
+          )}
         </>
       )}
     </div>
@@ -79,9 +87,13 @@ async function runVerify(doc, sig) {
   let labelDerB64 = ''
   let label = null
   let labelSource = '없음'
+  let derBytes = null
+  let isEmbedded = false
+  let originalSize = doc?.size ?? 0
 
   if (sig) {
     const der = await sig.arrayBuffer()
+    derBytes = new Uint8Array(der)
     labelDerB64 = bytesToBase64(der)
     label = parseLabel(der) // 평문 속성 — 오프라인에서도 읽힌다
     labelSource = '사이드카(.lmsig)'
@@ -91,8 +103,11 @@ async function runVerify(doc, sig) {
     const embedded = extractEmbedded(buf)
     if (embedded) {
       // 라벨 내장 파일: 트레일러를 떼고 원본 부분만 해시한다
+      isEmbedded = true
+      originalSize = embedded.original.length
       contentHash = await sha256HexBytes(embedded.original)
       if (!sig) {
+        derBytes = embedded.der
         labelDerB64 = bytesToBase64(embedded.der)
         label = parseLabel(embedded.der.buffer.slice(
           embedded.der.byteOffset, embedded.der.byteOffset + embedded.der.byteLength))
@@ -106,7 +121,19 @@ async function runVerify(doc, sig) {
   }
   if (!contentHash) throw new Error('문서 파일 또는 라벨이 필요합니다')
 
-  const meta = { fileName: doc?.name || sig?.name, contentHash, label, labelSource }
+  const meta = {
+    fileName: doc?.name || sig?.name, contentHash, label, labelSource,
+    // 구조 뷰어(StructureView)용 원시 데이터
+    structure: {
+      fileName: doc?.name || sig?.name,
+      fileSize: doc?.size ?? derBytes?.length ?? 0,
+      embedded: isEmbedded,
+      originalSize,
+      derBytes,
+      sidecarName: sig?.name,
+      label
+    }
+  }
 
   try {
     const res = await api.verify({
