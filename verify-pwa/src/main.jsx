@@ -7,6 +7,7 @@ import IssuePage from './pages/Issue.jsx'
 import LedgerPage from './pages/Ledger.jsx'
 import LineagePage from './pages/Lineage.jsx'
 import AdminPage from './pages/Admin.jsx'
+import KeysPage from './pages/Keys.jsx'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route element={<App />}>
           {/* 메뉴는 문서 수명주기 시간순: 대시보드 → 생성 → 원장 → 검증 */}
           <Route path="/" element={<AdminPage />} />
+          <Route path="/keys" element={<KeysPage />} />
           <Route path="/issue" element={<IssuePage />} />
           <Route path="/ledger" element={<LedgerPage />} />
           <Route path="/verify" element={<VerifyPage />} />

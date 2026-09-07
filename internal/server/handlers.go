@@ -239,9 +239,19 @@ func (s *Server) handleTrustImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, ta)
 }
 
-func (s *Server) handleTreaties(w http.ResponseWriter, _ *http.Request) {
-	// 등가성 협정은 Phase 2 — 인터페이스만 존재한다 (internal/treaty)
-	writeJSON(w, http.StatusOK, map[string]interface{}{"treaties": []interface{}{}})
+func (s *Server) handleTreaties(w http.ResponseWriter, r *http.Request) {
+	// 등가성 협정 목록 (여권 정책 — docs/treaty-policy.md).
+	// Phase 1은 목록 노출까지; 검증 L3 번역 반영은 Phase 2.
+	if s.cfg.Treaty == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"treaties": []interface{}{}})
+		return
+	}
+	list, err := s.cfg.Treaty.List(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"treaties": list})
 }
 
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {

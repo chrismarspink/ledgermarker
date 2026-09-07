@@ -23,6 +23,8 @@ import (
 	"github.com/spf13/cobra"
 
 	gatesdk "github.com/innotium/ledgermarker/sdk/go"
+
+	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
 )
 
 const sidecarExt = ".lmsig" // 사이드카 파일명: <원본파일명>.lmsig (DER)
@@ -87,7 +89,7 @@ func main() {
 		os.Getenv("LM_API_KEY"), "X-LM-Key API 키")
 
 	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdLineage(), cmdRevoke(),
-		cmdLedger(), cmdTrust())
+		cmdLedger(), cmdTrust(), cmdPKI())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
@@ -511,6 +513,45 @@ func cmdLedger() *cobra.Command {
 	listCmd.Flags().BoolVar(&lJSON, "json", false, "JSON 출력 (전체 필드·해시 원문 포함)")
 
 	c.AddCommand(verifyCmd, ckptCmd, listCmd)
+	return c
+}
+
+// ── lm pki init-org --org NTS --dir ./nts-keystore ─────────
+// 기관 키스토어 생성. 키 쌍은 반드시 각 기관 로컬에서 만든다 —
+// 개인키는 네트워크로 이동하지 않으며, 상대 기관에는 CA 인증서(공개)만
+// 전달해 신뢰목록(lm trust import)에 반입한다. CLI가 서버 API를 거치지
+// 않는 예외 지점이다(해시 계산과 같은 이유 — 비밀은 로컬에 머문다).
+
+func cmdPKI() *cobra.Command {
+	c := &cobra.Command{Use: "pki", Short: "기관 PKI 도구 (키는 로컬 생성 — 반출 금지)"}
+	var dir, org string
+	initCmd := &cobra.Command{
+		Use:   "init-org",
+		Short: "기관 키스토어 생성 (Org Root CA + Label/Checkpoint Signer)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if org == "" {
+				return fmt.Errorf("--org 는 필수입니다 (기관 식별자, 예: NTS)")
+			}
+			if _, err := os.Stat(filepath.Join(dir, "ca.crt")); err == nil {
+				return fmt.Errorf("%s 에 키스토어가 이미 있습니다", dir)
+			}
+			ks, err := softhsm.Open(dir, org)
+			if err != nil {
+				return fmt.Errorf("키스토어 생성: %w", err)
+			}
+			fmt.Printf("기관 %s 키스토어 생성 완료: %s\n", org, dir)
+			fmt.Printf("  ca.key / ca.crt                 — Org Root CA (10년, 오프라인 보관 대상)\n")
+			fmt.Printf("  label.key / label.crt           — Label Signer (90일)\n")
+			fmt.Printf("  checkpoint.key / checkpoint.crt — Checkpoint Signer (1년)\n")
+			fmt.Printf("연동 절차: 상대 기관에 %s 만 전달 →\n", filepath.Join(dir, "ca.crt"))
+			fmt.Printf("  lm trust import %s --org %s\n", filepath.Join(dir, "ca.crt"), org)
+			_ = ks
+			return nil
+		},
+	}
+	initCmd.Flags().StringVar(&dir, "dir", "./keystore", "키스토어 디렉터리")
+	initCmd.Flags().StringVar(&org, "org", "", "기관 식별자 (필수)")
+	c.AddCommand(initCmd)
 	return c
 }
 

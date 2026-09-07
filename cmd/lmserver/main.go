@@ -10,9 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
 	"github.com/innotium/ledgermarker/internal/server"
 	"github.com/innotium/ledgermarker/internal/store"
+	"github.com/innotium/ledgermarker/internal/treaty"
 	"github.com/innotium/ledgermarker/migrations"
 )
 
@@ -58,6 +61,23 @@ func main() {
 	}
 	defer st.Close()
 
+	// 등가성 협정(여권 정책) — LM_TREATIES=협정 JSON 경로 (docs/treaty-policy.md)
+	var treatySvc treaty.Service
+	if path := os.Getenv("LM_TREATIES"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			log.Error("read treaties file", "path", path, "err", err)
+			os.Exit(1)
+		}
+		var list []treaty.Treaty
+		if err := json.Unmarshal(b, &list); err != nil {
+			log.Error("parse treaties file", "path", path, "err", err)
+			os.Exit(1)
+		}
+		treatySvc = treaty.NewStatic(list)
+		log.Info("treaties loaded", "count", len(list), "path", path)
+	}
+
 	srv := server.New(server.Config{
 		Store:                st,
 		LabelSigner:          ks.LabelSigner(),
@@ -68,6 +88,7 @@ func main() {
 		IssuerOrg:            issuerOrg,
 		APIKeys:              apiKeys,
 		RegradeApprovalToken: regradeToken,
+		Treaty:               treatySvc,
 		Logger:               log,
 		RefreshView:          refresh,
 	})

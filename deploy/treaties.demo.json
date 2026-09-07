@@ -1,0 +1,26 @@
+[
+  {
+    "id": "kpost-mois-2026-01",
+    "partyA": "KPOST",
+    "partyB": "MOIS",
+    "gradeMap": { "S": "S", "O": "O" },
+    "signedAt": "2026-09-01T00:00:00Z",
+    "notAfter": "2027-08-31T23:59:59Z"
+  },
+  {
+    "id": "kpost-nts-2026-01",
+    "partyA": "KPOST",
+    "partyB": "NTS",
+    "gradeMap": { "S": "S", "O": "O" },
+    "signedAt": "2026-09-01T00:00:00Z",
+    "notAfter": "2027-08-31T23:59:59Z"
+  },
+  {
+    "id": "kpost-msit-2026-01",
+    "partyA": "KPOST",
+    "partyB": "MSIT",
+    "gradeMap": { "S": "S", "O": "O" },
+    "signedAt": "2026-09-01T00:00:00Z",
+    "notAfter": "2027-08-31T23:59:59Z"
+  }
+]

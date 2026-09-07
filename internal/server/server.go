@@ -13,6 +13,7 @@ import (
 	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
 	"github.com/innotium/ledgermarker/internal/ledger"
 	"github.com/innotium/ledgermarker/internal/store"
+	"github.com/innotium/ledgermarker/internal/treaty"
 )
 
 // Config 는 서버 구성이다.
@@ -31,6 +32,9 @@ type Config struct {
 	APIKeys []string
 	// RegradeApprovalToken 은 등급 하향 승인 토큰이다 (T9).
 	RegradeApprovalToken string
+	// Treaty 는 등가성 협정 서비스다(선택). 검증 L3 반영은 Phase 2 —
+	// Phase 1은 목록 노출(/v1/treaties)까지만 한다.
+	Treaty treaty.Service
 	Logger               *slog.Logger
 	// RefreshView 는 쓰기 후 current_label 구체화 뷰 갱신 훅(선택)이다.
 	RefreshView func(ctx context.Context) error
@@ -71,7 +75,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/documents/{docGuid}/lineage", s.handleLineage)
 	mux.HandleFunc("GET /v1/checkpoints/latest", s.handleLatestCheckpoint)
 	mux.HandleFunc("GET /v1/trust/list", s.handleTrustList)
-	mux.HandleFunc("GET /v1/treaties", s.handleTreaties) // Phase 2 — 빈 목록
+	mux.HandleFunc("GET /v1/keys", s.handleKeys)         // 공개키·인증서만 노출
+	mux.HandleFunc("GET /v1/treaties", s.handleTreaties) // 등가성 협정 (여권 정책)
 
 	// 비공개 (발급·운영)
 	mux.HandleFunc("POST /v1/labels", s.auth(s.handleIssue))

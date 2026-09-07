@@ -25,6 +25,8 @@ export const api = {
     req('GET', `/v1/documents/${docGuid}/lineage?depth=${depth}&direction=${direction}`),
   trustList: () => req('GET', '/v1/trust/list'),
   latestCheckpoint: () => req('GET', '/v1/checkpoints/latest'),
+  keys: () => req('GET', '/v1/keys'),
+  treaties: () => req('GET', '/v1/treaties'),
   adminStats: (apiKey) => req('GET', '/v1/admin/stats', null, apiKey),
   ledgerEvents: (apiKey, limit = 50) =>
     req('GET', `/v1/ledger/events?limit=${limit}`, null, apiKey)
