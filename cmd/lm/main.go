@@ -131,9 +131,17 @@ func cmdIssue() *cobra.Command {
 			if parent != "" {
 				ph := parent
 				if len(parent) != 64 {
-					if ph, err = hashFile(parent); err != nil {
-						return fmt.Errorf("부모 파일 해시: %w", err)
+					// 부모가 라벨 내장 파일이면 트레일러를 뗀 원본 기준으로
+					// 해시한다 — 원장 등록 해시와 일치해야 계보가 이어진다.
+					pdata, err := os.ReadFile(parent)
+					if err != nil {
+						return fmt.Errorf("부모 파일 읽기: %w", err)
 					}
+					if porig, _, ok := splitEmbedded(pdata); ok {
+						pdata = porig
+					}
+					psum := sha256.Sum256(pdata)
+					ph = hex.EncodeToString(psum[:])
 				}
 				if req.Lineage == nil {
 					req.Lineage = &gatesdk.LineageDecl{}

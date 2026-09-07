@@ -1,5 +1,5 @@
 import React from 'react'
-import { sha256Hex, bytesToBase64 } from '../lib/hash.js'
+import { sha256Hex, sha256HexBytes } from '../lib/hash.js'
 import { api } from '../lib/api.js'
 import { extractEmbedded, embedLabel } from '../lib/embed.js'
 
@@ -48,7 +48,13 @@ export default function IssuePage() {
       }
       if (form.brmPath.trim()) payload.brmPath = form.brmPath.trim()
       if (parentFile) {
-        const parentHash = await sha256Hex(parentFile)
+        // 부모가 라벨 내장 파일이면 트레일러를 떼고 원본 부분을 해시한다 —
+        // 원장에는 원본 기준 해시가 등록되어 있다.
+        const pbuf = await parentFile.arrayBuffer()
+        const pEmbedded = extractEmbedded(pbuf)
+        const parentHash = pEmbedded
+          ? await sha256HexBytes(pEmbedded.original)
+          : await sha256HexBytes(pbuf)
         payload.lineage = { parentHash, transform: form.transform }
       }
 
