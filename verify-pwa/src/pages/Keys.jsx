@@ -1,6 +1,7 @@
 import React from 'react'
 import { api } from '../lib/api.js'
 import { pemToCert } from '../lib/cms.js'
+import { orgLabel } from '../lib/orgs.js'
 
 // 키 관리 — 자기 기관(KPOST) 키 쌍 가시화 + 연동 기관 신뢰목록 +
 // 등가성 협정(여권 정책, docs/treaty-policy.md).
@@ -49,7 +50,7 @@ function AnchorCard({ anchor }) {
   }, [anchor.certPem])
   return (
     <div className="keybox signer" style={{ marginBottom: 10 }}>
-      <div className="keybox-title">{anchor.orgId} <span className="hint">— 반입 {String(anchor.addedAt).slice(0, 10)}</span></div>
+      <div className="keybox-title">{orgLabel(anchor.orgId)} <span className="hint">— 반입 {String(anchor.addedAt).slice(0, 10)}</span></div>
       {parsed ? (
         <div className="keybox-body">
           <div className="mono">{parsed.cn} · serial 0x{parsed.serial}</div>
@@ -82,7 +83,7 @@ export default function KeysPage() {
       {error && <p className="error">{error}</p>}
 
       <div className="card">
-        <h2>자기 기관 키 체계 — {keys?.orgId || '…'}</h2>
+        <h2>자기 기관 키 체계 — {keys ? orgLabel(keys.orgId) : '…'}</h2>
         <p className="hint">
           기관 서명 CA가 두 서명자에게 인증서를 발급하는 2계층 구조입니다.
           모든 개인키는 키스토어 밖으로 나오지 않으며, 이 화면의 값은 전부 공개 정보입니다.
@@ -129,7 +130,7 @@ export default function KeysPage() {
                 {treaties.map((t) => (
                   <tr key={t.id}>
                     <td className="mono">{t.id}</td>
-                    <td>{t.partyA} ↔ {t.partyB}</td>
+                    <td>{orgLabel(t.partyA)} ↔ {orgLabel(t.partyB)}</td>
                     <td className="mono">
                       {Object.entries(t.gradeMap).map(([a, b]) => `${a}→${b}`).join(', ')} (역방향 자동)
                     </td>

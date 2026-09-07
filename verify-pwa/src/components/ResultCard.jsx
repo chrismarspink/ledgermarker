@@ -1,4 +1,5 @@
 import React from 'react'
+import { orgLabel } from '../lib/orgs.js'
 
 // 검증 결과를 단순 O/X로 합치지 않는다 — 5개 체크 항목을 각각 표시하고,
 // 종합 판정(verdictHint)은 보조로만 보여준다 (DEV SPEC §8.3).
@@ -46,7 +47,7 @@ export default function ResultCard({ result }) {
       <div className="attribution">
         <div className={`grade ${grade === 'S' || grade === 'O' ? grade : 'unknown'}`}>{grade}</div>
         <div>
-          <div><b>{attribution.issuerOrg || '발급기관 미상'}</b> · {attribution.approvalState || '-'}</div>
+          <div><b>{attribution.issuerOrg ? orgLabel(attribution.issuerOrg) : '발급기관 미상'}</b> · {attribution.approvalState || '-'}</div>
           <div className="mono">docGuid {attribution.docGuid || '-'}</div>
           {attribution.rootDocId && attribution.rootDocId !== attribution.docGuid && (
             <div className="mono">최초 조상 {attribution.rootDocId}</div>
