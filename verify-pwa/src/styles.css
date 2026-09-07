@@ -14,8 +14,8 @@ body {
   background: #f7f8fa;
   color: #111827;
 }
-.app { max-width: 880px; margin: 0 auto; padding: 0 16px 48px; }
-header { display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.app { max-width: 880px; margin: 0 auto; padding: 28px 16px 48px; }
+header { display: flex; align-items: center; gap: 20px; padding: 8px 0 18px; border-bottom: 1px solid var(--line); }
 header h1 { font-size: 20px; margin: 0; color: var(--navy); }
 header nav { display: flex; gap: 14px; flex: 1; }
 header nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
