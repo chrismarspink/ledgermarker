@@ -1,0 +1,191 @@
+package server
+
+import (
+	"encoding/base64"
+	"encoding/hex"
+	"net/http"
+	"strconv"
+
+	"github.com/google/uuid"
+
+	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/innotium/ledgermarker/internal/lineage"
+	"github.com/innotium/ledgermarker/internal/store"
+	"github.com/innotium/ledgermarker/internal/verify"
+)
+
+// handleVerify 는 POST /v1/verify — 가장 중요한 계약이다 (DEV SPEC §6.3).
+// LM은 귀속만 답하고, 통과 여부는 호출자 정책이 정한다(불변식 4).
+func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		LabelDER    string `json:"labelDer,omitempty"` // 없으면 폴백 검증
+		ContentHash string `json:"contentHash"`        // 필수
+		Level       int    `json:"level,omitempty"`    // 1|2|3(Phase 2)
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	contentHash, err := hex.DecodeString(req.ContentHash)
+	if err != nil || len(contentHash) != 32 {
+		writeErr(w, http.StatusBadRequest, "contentHash must be 64 hex chars (SHA-256)")
+		return
+	}
+	var labelDER []byte
+	if req.LabelDER != "" {
+		labelDER, err = base64.StdEncoding.DecodeString(req.LabelDER)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "labelDer must be base64")
+			return
+		}
+	}
+	deps := verify.Deps{
+		Ledger:         s.cfg.Store,
+		Roots:          s.rootsPool(r.Context()),
+		RevokedSerials: s.cfg.RevokedSerials(),
+	}
+	res, err := verify.Run(r.Context(), deps, verify.Params{
+		LabelDER:    labelDER,
+		ContentHash: contentHash,
+		Level:       req.Level,
+	})
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleLineage(w http.ResponseWriter, r *http.Request) {
+	docGUID, err := uuid.Parse(r.PathValue("docGuid"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid docGuid")
+		return
+	}
+	depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = "both"
+	}
+	g, err := lineage.Query(r.Context(), s.cfg.Store, docGUID, depth, direction)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
+}
+
+func (s *Server) handleLatestCheckpoint(w http.ResponseWriter, r *http.Request) {
+	c, err := s.cfg.Store.LatestCheckpoint(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	if c == nil {
+		writeErr(w, http.StatusNotFound, "no checkpoint yet")
+		return
+	}
+	writeJSON(w, http.StatusOK, checkpointJSON(c))
+}
+
+func (s *Server) handleSealCheckpoint(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		FromSeq int64 `json:"fromSeq,omitempty"`
+		ToSeq   int64 `json:"toSeq,omitempty"`
+	}
+	_ = readJSON(r, &req) // 본문 없으면 직전 체크포인트 이후 ~ tip
+	c, err := s.writer.SealCheckpoint(r.Context(), s.cfg.CheckpointSigner, req.FromSeq, req.ToSeq)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	s.log.Info("checkpoint sealed", "from", c.FromSeq, "to", c.ToSeq)
+	writeJSON(w, http.StatusCreated, checkpointJSON(c))
+}
+
+// checkpointJSON 은 바이너리 필드를 hex로 인코딩해 반환한다.
+func checkpointJSON(c *ledger.Checkpoint) map[string]interface{} {
+	return map[string]interface{}{
+		"ckptId":       c.ID,
+		"fromSeq":      c.FromSeq,
+		"toSeq":        c.ToSeq,
+		"merkleRoot":   hex.EncodeToString(c.MerkleRoot),
+		"signature":    base64.StdEncoding.EncodeToString(c.Signature),
+		"signerCertSn": c.SignerCertSN,
+		"signedAt":     c.SignedAt,
+	}
+}
+
+func (s *Server) handleLedgerVerify(w http.ResponseWriter, r *http.Request) {
+	from, _ := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
+	to, _ := strconv.ParseInt(r.URL.Query().Get("to"), 10, 64)
+	badSeq, checked, err := s.writer.Verify(r.Context(), from, to)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      badSeq == 0,
+		"badSeq":  badSeq, // 조작 지점 seq (0 = 무결) — T3
+		"checked": checked,
+	})
+}
+
+// handleTrustList 는 PWA가 오프라인 캐시하는 신뢰목록이다.
+func (s *Server) handleTrustList(w http.ResponseWriter, r *http.Request) {
+	anchors, err := s.cfg.Store.TrustAnchors(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "trust list unavailable")
+		return
+	}
+	revoked := []string{}
+	for sn := range s.cfg.RevokedSerials() {
+		revoked = append(revoked, sn)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"orgId":  s.cfg.IssuerOrg,
+		"caCert": string(s.cfg.CACertPEM),
+		// 라벨 폐기(원장 이벤트)와 별개인 인증서 폐기 목록 (CRL 대용, §5.3)
+		"revokedCertSerials": revoked,
+		"anchors":            anchors,
+	})
+}
+
+func (s *Server) handleTrustImport(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OrgID   string `json:"orgId"`
+		CertPEM string `json:"certPem"`
+	}
+	if err := readJSON(r, &req); err != nil || req.CertPEM == "" {
+		writeErr(w, http.StatusBadRequest, "orgId and certPem are required")
+		return
+	}
+	ta := &store.TrustAnchor{OrgID: req.OrgID, CertPEM: req.CertPEM}
+	if err := s.cfg.Store.AddTrustAnchor(r.Context(), ta); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, ta)
+}
+
+func (s *Server) handleTreaties(w http.ResponseWriter, _ *http.Request) {
+	// 등가성 협정은 Phase 2 — 인터페이스만 존재한다 (internal/treaty)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"treaties": []interface{}{}})
+}
+
+func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	counts, err := s.cfg.Store.EventCounts(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	ckpt, _ := s.cfg.Store.LatestCheckpoint(r.Context())
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"eventCounts":      counts,
+		"latestCheckpoint": ckpt,
+		"labelSigner": map[string]interface{}{
+			"serial":   s.cfg.LabelSigner.SerialNumber(),
+			"notAfter": s.cfg.LabelSigner.NotAfter(),
+		},
+	})
+}

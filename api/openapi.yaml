@@ -1,0 +1,235 @@
+openapi: 3.0.3
+info:
+  title: LedgerMarker API
+  version: "0.1"
+  description: |
+    LM Server REST API (Phase 1).
+
+    **불변식**
+    1. 원장은 절대 수정·삭제되지 않는다 — 모든 변경은 새 이벤트 행 추가.
+    2. 라벨 등급 필드는 평문 — 게이트가 복호화 없이 읽는다.
+    3. 서버는 문서 본문을 저장하지 않는다 — 해시·메타데이터·서명만.
+    4. 귀속과 판정 분리 — `verdictHint`는 참고값. 통과 여부는 호출자 정책이 정한다.
+servers:
+  - url: /v1
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-LM-Key
+      description: "✎ 운영 인증 방식(mTLS vs API Key) 확정 필요 (DEV SPEC §13-4)"
+  schemas:
+    IssueRequest:
+      type: object
+      required: [contentHash, grade]
+      properties:
+        docGuid: { type: string, format: uuid, description: 없으면 서버가 생성 }
+        contentHash: { type: string, description: hex SHA-256 (64자) }
+        grade: { type: string, enum: [S, O], description: C는 400 — 체계 범위 밖 }
+        basisClause: { type: integer, minimum: 1, maximum: 8, description: 정보공개법 9조 호수 }
+        basisKeywords: { type: array, items: { type: string } }
+        brmPath: { type: string }
+        approvalState: { type: string, enum: [PROVISIONAL, CONFIRMED], default: CONFIRMED }
+        approverRank: { type: string }
+        disclosureCondition: { type: string, format: date-time }
+        lineage:
+          type: object
+          properties:
+            parentHash: { type: string, description: 직전 버전 hex SHA-256 }
+            transform: { type: string, enum: [edit, convert, merge, extract] }
+        notAfterDays: { type: integer, default: 365 }
+        exportApprover: { type: string }
+    IssueResponse:
+      type: object
+      properties:
+        docGuid: { type: string, format: uuid }
+        labelDer: { type: string, description: base64 CMS SignedData }
+        ledgerSeq: { type: integer, format: int64 }
+        rootDocId: { type: string, format: uuid }
+        issuedAt: { type: string, format: date-time }
+        notAfter: { type: string, format: date-time }
+    VerifyRequest:
+      type: object
+      required: [contentHash]
+      properties:
+        labelDer: { type: string, description: base64. 없으면 폴백 검증(해시만 조회) }
+        contentHash: { type: string, description: hex SHA-256 — 필수 }
+        level: { type: integer, enum: [1, 2, 3], default: 2, description: 3(협정)은 Phase 2 }
+    VerifyResponse:
+      type: object
+      properties:
+        attribution:
+          type: object
+          description: '"이 문서가 무엇인가" — LM이 답한다'
+          properties:
+            docGuid: { type: string }
+            grade: { type: string }
+            approvalState: { type: string }
+            issuerOrg: { type: string }
+            rootDocId: { type: string }
+            confidence: { type: number, description: 선언적=1.0, 지문추정=0~1(Phase 2) }
+        checks:
+          type: object
+          properties:
+            signature: { type: string, enum: [valid, invalid, absent, untrusted_ca] }
+            ledger:
+              type: string
+              enum: [registered, unregistered, unavailable]
+              description: |
+                unavailable(접속 불가)과 unregistered(조회했으나 없음)를
+                절대 혼동하지 말 것. 전자는 판단 보류, 후자는 미등록 판정.
+            revocation: { type: string, enum: [none, revoked, superseded] }
+            validity: { type: string, enum: [in_window, expired, not_yet] }
+            treaty: { type: string, enum: [present, absent, not_applicable] }
+        translatedGrade: { type: string }
+        verdictHint:
+          type: string
+          enum: [allow, deny, review]
+          description: 참고값일 뿐 — 호출자가 무시할 수 있어야 하며, LM은 차단을 강제하지 않는다
+        reasons: { type: array, items: { type: string } }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+paths:
+  /labels:
+    post:
+      summary: 라벨 발급
+      security: [{ ApiKey: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: 동일 키 재요청 시 동일 응답, 원장 행 1개만 (T12)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IssueRequest' } } }
+      responses:
+        "201":
+          description: 발급 완료
+          content: { application/json: { schema: { $ref: '#/components/schemas/IssueResponse' } } }
+        "400":
+          description: 잘못된 요청 (C등급 포함 — 범위 밖)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /labels/{docGuid}/revoke:
+    post:
+      summary: 라벨 폐기 (원장 REVOKE 이벤트 추가 — 삭제 아님)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string } }
+      responses:
+        "200": { description: 폐기 등록 완료 }
+        "404": { description: 원장에 없는 문서 }
+        "409": { description: 이미 폐기됨 }
+  /labels/{docGuid}/regrade:
+    post:
+      summary: 등급 변경 (하향은 approvalToken 필수, 상향은 즉시 + 구 라벨 superseded)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grade]
+              properties:
+                grade: { type: string, enum: [S, O] }
+                approvalToken: { type: string, description: 하향 시 필수 }
+                reason: { type: string }
+      responses:
+        "200":
+          description: 새 라벨 발급 (REGRADE 이벤트)
+          content: { application/json: { schema: { $ref: '#/components/schemas/IssueResponse' } } }
+        "403": { description: 하향 승인 토큰 없음/불일치 (T9) }
+  /verify:
+    post:
+      summary: 검증 L1~L2 (게이트·PWA 공용) — 가장 중요한 계약
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VerifyRequest' } } }
+      responses:
+        "200":
+          description: 검증 결과 (귀속 + 5개 체크)
+          content: { application/json: { schema: { $ref: '#/components/schemas/VerifyResponse' } } }
+  /documents/{docGuid}/lineage:
+    get:
+      summary: 계보(족보) 조회 — 선언적 DAG
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: depth, in: query, schema: { type: integer, default: 10 } }
+        - { name: direction, in: query, schema: { type: string, enum: [up, down, both], default: both } }
+      responses:
+        "200": { description: 노드·간선 그래프 }
+        "404": { description: 원장에 없는 문서 }
+  /checkpoints/latest:
+    get:
+      summary: 최신 체크포인트 (인증 없이 공개)
+      responses:
+        "200": { description: 체크포인트 }
+        "404": { description: 아직 없음 }
+  /checkpoints:
+    post:
+      summary: 체크포인트 발행 (운영자 전용 — 직전 봉인 이후 ~ tip)
+      security: [{ ApiKey: [] }]
+      responses:
+        "201": { description: 봉인 완료 }
+        "409": { description: 봉인할 신규 구간 없음 }
+  /ledger/verify:
+    get:
+      summary: 해시 체인 무결성 점검 — 조작 지점 seq 지목 (T3)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: integer, default: 1 } }
+        - { name: to, in: query, schema: { type: integer, description: 0 = tip } }
+      responses:
+        "200":
+          description: '{ok, badSeq, checked}'
+  /trust/list:
+    get:
+      summary: 신뢰목록 (PWA 오프라인 캐시 대상 — 자기 CA + 파트너 CA + 폐기 인증서 SN)
+      responses:
+        "200": { description: 신뢰목록 }
+  /trust/import:
+    post:
+      summary: 파트너 기관 CA 반입
+      security: [{ ApiKey: [] }]
+      responses:
+        "201": { description: 반입 완료 }
+  /treaties:
+    get:
+      summary: 등가성 협정 목록 (Phase 2 — 항상 빈 목록)
+      responses:
+        "200": { description: 협정 목록 }
+  /batch/scan:
+    post:
+      summary: 대량 소급 라벨링 (비동기)
+      security: [{ ApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '#/components/schemas/IssueRequest' } }
+      responses:
+        "202": { description: '{jobId}' }
+  /batch/{jobId}:
+    get:
+      summary: 배치 상태 조회
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: 작업 상태·결과 }
+        "404": { description: 작업 없음 }
