@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// LM Verify — 오프라인 검증기 (DEV SPEC §8)
+// LedgerMarker Web — 발급·원장·검증 PWA (DEV SPEC §8의 LM Verify에서 확장)
 // Service Worker(Workbox)가 신뢰목록·최신 체크포인트를 캐시해
 // 오프라인에서도 L1 검증이 가능하다.
 export default defineConfig({
@@ -11,9 +11,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'LM Verify',
-        short_name: 'LM Verify',
-        description: 'LedgerMarker 문서 라벨 검증기',
+        name: 'LedgerMarker',
+        short_name: 'LedgerMarker',
+        description: 'LedgerMarker — 문서 라벨 발급·원장·검증',
         theme_color: '#1a2b4a',
         background_color: '#ffffff',
         display: 'standalone',

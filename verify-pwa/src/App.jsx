@@ -17,11 +17,12 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>LM Verify</h1>
+        <h1>LedgerMarker</h1>
         <nav>
-          <NavLink to="/">검증</NavLink>
-          <NavLink to="/issue">라벨 발급</NavLink>
-          <NavLink to="/admin">대시보드</NavLink>
+          <NavLink to="/" end>대시보드</NavLink>
+          <NavLink to="/issue">생성</NavLink>
+          <NavLink to="/ledger">원장</NavLink>
+          <NavLink to="/verify">검증</NavLink>
         </nav>
         <span className={online ? 'badge online' : 'badge offline'}>
           {online ? '온라인' : '오프라인 — 로컬(L1) 검증만 가능'}

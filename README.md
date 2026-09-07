@@ -17,7 +17,7 @@
 | 산출물 | 위치 | 스택 |
 |---|---|---|
 | LM Server | `cmd/lmserver` | Go 1.22+ · PostgreSQL 16 |
-| LM Verify (PWA) | `verify-pwa/` | React 18 + Vite + Workbox |
+| LedgerMarker Web (PWA, 구 LM Verify) | `verify-pwa/` | React 18 + Vite + Workbox |
 | LM CLI | `cmd/lm` | Go + Cobra (서버 API 래퍼) |
 | LM Gate SDK | `sdk/go/` (+ `api/openapi.yaml`) | Go 라이브러리 + REST 명세 |
 

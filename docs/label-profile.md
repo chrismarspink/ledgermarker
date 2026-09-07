@@ -95,7 +95,7 @@ profileVersion 2로 올리고 이 문서를 갱신한다** (DEV SPEC §13-1).
 - 적합 포맷: 꼬리 데이터를 무시하는 포맷(PDF, JPEG, PNG, HWP v5 등).
   ZIP 기반 포맷(docx/xlsx/hwpx)은 일부 엄격한 리더가 경고할 수 있으므로
   사이드카 또는 Phase 2 포맷 내장을 권고한다.
-- 구현: `lm issue --embed`, `lm verify`(자동 인식), LM Verify PWA
+- 구현: `lm issue --embed`, `lm verify`(자동 인식), LedgerMarker Web(PWA)
   라벨 발급/검증 화면.
 
 ## 6. 변경 이력
