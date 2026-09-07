@@ -23,6 +23,10 @@ export const api = {
   issue: (payload, apiKey, idemKey) => req('POST', '/v1/labels', payload, apiKey, idemKey),
   revoke: (docGuid, reason, apiKey) =>
     req('POST', `/v1/labels/${docGuid}/revoke`, { reason }, apiKey),
+  regrade: (docGuid, grade, approvalToken, reason, apiKey) =>
+    req('POST', `/v1/labels/${docGuid}/regrade`, { grade, approvalToken, reason }, apiKey),
+  destroy: (docGuid, reason, approvalToken, apiKey) =>
+    req('POST', `/v1/labels/${docGuid}/destroy`, { reason, approvalToken }, apiKey),
   lineage: (docGuid, depth = 10, direction = 'both') =>
     req('GET', `/v1/documents/${docGuid}/lineage?depth=${depth}&direction=${direction}`),
   trustList: () => req('GET', '/v1/trust/list'),

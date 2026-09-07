@@ -19,7 +19,16 @@ const (
 	EventRevoke  EventType = "REVOKE"
 	EventRegrade EventType = "REGRADE"
 	EventDerive  EventType = "DERIVE"
+	// EventDestroy 는 파기다: 보존기간 만료 + 심의 후 키 파기.
+	// 원장 행(해시·메타·계보)은 영구 보존된다 — 파기 증적이자,
+	// 파기된 문서의 사본 유통을 게이트가 차단할 근거다.
+	EventDestroy EventType = "DESTROY"
 )
+
+// IsIssuance 는 라벨을 동반하는 발급성 이벤트인지 반환한다.
+func (t EventType) IsIssuance() bool {
+	return t == EventIssue || t == EventDerive || t == EventRegrade
+}
 
 // Event 는 ledger_event 한 행이다.
 type Event struct {

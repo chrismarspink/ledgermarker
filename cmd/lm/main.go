@@ -89,7 +89,7 @@ func main() {
 		os.Getenv("LM_API_KEY"), "X-LM-Key API 키")
 
 	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdLineage(), cmdRevoke(),
-		cmdLedger(), cmdTrust(), cmdPKI())
+		cmdRegrade(), cmdDestroy(), cmdLedger(), cmdTrust(), cmdPKI())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
@@ -513,6 +513,63 @@ func cmdLedger() *cobra.Command {
 	listCmd.Flags().BoolVar(&lJSON, "json", false, "JSON 출력 (전체 필드·해시 원문 포함)")
 
 	c.AddCommand(verifyCmd, ckptCmd, listCmd)
+	return c
+}
+
+// ── lm regrade <docGuid> --grade O --approval-token ... ────
+// 등급 변경. 하향(S→O)이 곧 "공개 전환"이며 승인 토큰이 필수다.
+// 폐기는 공개 전환이 아니다 — docs/lifecycle-policy.md.
+
+func cmdRegrade() *cobra.Command {
+	var grade, token, reason string
+	c := &cobra.Command{
+		Use:   "regrade <docGuid>",
+		Short: "등급 변경 (하향 = 공개 전환, 승인 토큰 필수; 상향 즉시)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			resp, err := client().Regrade(context.Background(), args[0], grade, token, reason)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("등급 변경 완료: %s → %s (seq %d) — 구 라벨은 superseded 처리\n",
+				args[0], grade, resp.LedgerSeq)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&grade, "grade", "", "새 등급 (S|O) — 필수")
+	c.Flags().StringVar(&token, "approval-token", "", "하향(공개 전환) 승인 토큰")
+	c.Flags().StringVar(&reason, "reason", "", "변경 사유")
+	_ = c.MarkFlagRequired("grade")
+	return c
+}
+
+// ── lm destroy <docGuid> --reason ... --approval-token ... ──
+// 파기: 보존기간 만료 + 심의 후. 불가역. 키 파기(crypto-shredding)를
+// 지시하고 원장에 DESTROY 이벤트를 남긴다 — 증적은 영구 보존.
+
+func cmdDestroy() *cobra.Command {
+	var token, reason string
+	var yes bool
+	c := &cobra.Command{
+		Use:   "destroy <docGuid>",
+		Short: "파기 (불가역 — 파기 심의 토큰·근거 필수)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if !yes {
+				return fmt.Errorf("파기는 불가역입니다. 확인했으면 --yes 를 붙이세요")
+			}
+			if err := client().Destroy(context.Background(), args[0], reason, token); err != nil {
+				return err
+			}
+			fmt.Printf("파기 완료: %s — 원장 증적은 영구 보존되며, 사본 검증은 destroyed/deny로 판정됩니다\n", args[0])
+			return nil
+		},
+	}
+	c.Flags().StringVar(&reason, "reason", "", "파기 심의 근거 — 필수")
+	c.Flags().StringVar(&token, "approval-token", "", "파기 심의 승인 토큰 — 필수")
+	c.Flags().BoolVar(&yes, "yes", false, "불가역 작업 확인")
+	_ = c.MarkFlagRequired("reason")
+	_ = c.MarkFlagRequired("approval-token")
 	return c
 }
 

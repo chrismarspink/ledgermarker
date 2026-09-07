@@ -32,6 +32,12 @@ type Config struct {
 	APIKeys []string
 	// RegradeApprovalToken 은 등급 하향 승인 토큰이다 (T9).
 	RegradeApprovalToken string
+	// DestroyApprovalToken 은 파기 심의 승인 토큰이다. 미구성이면 파기가
+	// 전면 비활성화된다 — 파기는 심의 거버넌스 없이는 불가능해야 한다
+	// (docs/lifecycle-policy.md §2).
+	DestroyApprovalToken string
+	// KeyShredder 는 파기 시 KMS DEK 파기를 지시한다(Phase 2, nil 허용).
+	KeyShredder lmcrypto.KeyShredder
 	// Treaty 는 등가성 협정 서비스다(선택). 검증 L3 반영은 Phase 2 —
 	// Phase 1은 목록 노출(/v1/treaties)까지만 한다.
 	Treaty treaty.Service
@@ -82,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/labels", s.auth(s.handleIssue))
 	mux.HandleFunc("POST /v1/labels/{docGuid}/revoke", s.auth(s.handleRevoke))
 	mux.HandleFunc("POST /v1/labels/{docGuid}/regrade", s.auth(s.handleRegrade))
+	mux.HandleFunc("POST /v1/labels/{docGuid}/destroy", s.auth(s.handleDestroy))
 	mux.HandleFunc("POST /v1/checkpoints", s.auth(s.handleSealCheckpoint))
 	mux.HandleFunc("GET /v1/ledger/verify", s.auth(s.handleLedgerVerify))
 	mux.HandleFunc("GET /v1/ledger/events", s.auth(s.handleLedgerEvents))

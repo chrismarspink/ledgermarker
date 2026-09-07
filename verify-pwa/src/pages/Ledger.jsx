@@ -50,7 +50,7 @@ export default function LedgerPage() {
               </thead>
               <tbody>
                 {[...ledger.events].reverse().map((e) => (
-                  <tr key={e.seq} className={e.eventType === 'REVOKE' ? 'revoked' : ''}>
+                  <tr key={e.seq} className={e.eventType === 'REVOKE' || e.eventType === 'DESTROY' ? 'revoked' : ''}>
                     <td>{e.seq}</td>
                     <td>{e.eventType}{e.revokedRef ? ` →${e.revokedRef}` : ''}{e.transform ? ` ←${e.transform}` : ''}</td>
                     <td>{e.grade || '-'}</td>

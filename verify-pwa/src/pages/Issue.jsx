@@ -156,7 +156,7 @@ export default function IssuePage() {
         {error && <p className="error">{error}</p>}
       </div>
 
-      <RevokeSection apiKey={apiKey} />
+      <LifecycleSection apiKey={apiKey} />
 
       {done && (
         <div className="card">
@@ -187,22 +187,23 @@ export default function IssuePage() {
   )
 }
 
-// ── 라벨 폐기 (REVOKE) ─────────────────────────────────────
-// 폐기는 "유통 정지"이지 "공개 전환"이 아니다 — 본문 비밀성은 유지되고,
-// 원장에 REVOKE 이벤트가 추가될 뿐 어떤 것도 삭제되지 않는다.
-// 공개 전환은 승인 토큰을 동반한 REGRADE(S→O)로만 가능하다.
-// 상세: docs/lifecycle-policy.md
-function RevokeSection({ apiKey }) {
-  const [target, setTarget] = React.useState(null) // {docGuid, grade, issuerOrg, revocation, fileName}
+// ── 수명주기 조치: 등급 변경(공개 전환) · 폐기 · 파기 ──────────
+// 세 전이는 서로 다르다 (docs/lifecycle-policy.md):
+//  - 폐기(REVOKE): 유통 정지. 비밀성 유지, 가역. 공개 전환이 아니다.
+//  - 등급 하향(REGRADE S→O): "공개 전환" — 승인 토큰 필수.
+//  - 파기(DESTROY): 보존기간 만료 + 심의 후 키 파기. 불가역. 증적은 영구.
+function LifecycleSection({ apiKey }) {
+  const [target, setTarget] = React.useState(null)
+  const [action, setAction] = React.useState('') // revoke | regrade | destroy
   const [reason, setReason] = React.useState('')
+  const [newGrade, setNewGrade] = React.useState('O')
+  const [token, setToken] = React.useState('')
   const [busy, setBusy] = React.useState(false)
-  const [msg, setMsg] = React.useState(null) // {ok, text}
+  const [msg, setMsg] = React.useState(null)
   const fileRef = React.useRef()
 
   async function lookup(file) {
-    setMsg(null)
-    setTarget(null)
-    setBusy(true)
+    setMsg(null); setTarget(null); setAction(''); setBusy(true)
     try {
       const buf = await file.arrayBuffer()
       const emb = extractEmbedded(buf)
@@ -216,8 +217,10 @@ function RevokeSection({ apiKey }) {
         docGuid: res.attribution.docGuid,
         grade: res.attribution.grade,
         issuerOrg: res.attribution.issuerOrg,
-        revocation: res.checks.revocation
+        revocation: res.checks.revocation,
+        reasons: res.reasons || []
       })
+      setNewGrade(res.attribution.grade === 'S' ? 'O' : 'S')
     } catch (e) {
       setMsg({ ok: false, text: e.message })
     } finally {
@@ -225,19 +228,20 @@ function RevokeSection({ apiKey }) {
     }
   }
 
-  async function doRevoke() {
-    setBusy(true)
-    setMsg(null)
+  async function run() {
+    setBusy(true); setMsg(null)
     try {
-      await api.revoke(target.docGuid, reason, apiKey)
-      setMsg({
-        ok: true,
-        text: `폐기 등록 완료 — 원장에 REVOKE 이벤트가 추가되었습니다. ` +
-          `이후 이 문서(및 사본)의 검증은 revoked/deny로 판정됩니다. ` +
-          `본문 비밀성은 유지되며, 공개가 필요하면 별도의 등급 하향(REGRADE) 절차를 밟으세요.`
-      })
-      setTarget(null)
-      setReason('')
+      if (action === 'revoke') {
+        await api.revoke(target.docGuid, reason, apiKey)
+        setMsg({ ok: true, text: '폐기 등록 완료 — 유통이 정지됩니다. 본문 비밀성은 유지되며, 공개가 필요하면 등급 하향(공개 전환) 절차를 밟으세요.' })
+      } else if (action === 'regrade') {
+        const r = await api.regrade(target.docGuid, newGrade, token, reason, apiKey)
+        setMsg({ ok: true, text: `등급 변경 완료 (seq ${r.ledgerSeq}) — 구 라벨은 superseded 처리됩니다. 새 라벨을 재배포하세요.` })
+      } else if (action === 'destroy') {
+        await api.destroy(target.docGuid, reason, token, apiKey)
+        setMsg({ ok: true, text: '파기 완료 — 불가역. 원장 증적(해시·계보)은 영구 보존되며, 이후 사본 검증은 destroyed/deny로 판정됩니다.' })
+      }
+      setTarget(null); setAction(''); setReason(''); setToken('')
     } catch (e) {
       setMsg({ ok: false, text: e.message })
     } finally {
@@ -245,18 +249,18 @@ function RevokeSection({ apiKey }) {
     }
   }
 
+  const destroyed = target?.reasons.includes('destroyed')
   return (
     <div className="card">
-      <h2>라벨 폐기 (REVOKE)</h2>
+      <h2>수명주기 조치 — 등급 변경 · 폐기 · 파기</h2>
       <p className="hint">
-        폐기 = 유통 정지. 원장에 이벤트가 추가될 뿐 아무것도 삭제되지 않으며(추가 전용),
-        본문은 <b>공개로 전환되지 않습니다</b>. 복호화 키 파기(파기 절차)는 보존기간
-        만료·심의를 거치는 별도 단계입니다 — docs/lifecycle-policy.md 참조.
+        폐기 = 유통 정지(비밀성 유지·가역) · 공개 전환 = 등급 하향 REGRADE(승인 필수) ·
+        파기 = 심의 후 키 파기(불가역, 증적 영구 보존). 셋은 서로 다릅니다 — docs/lifecycle-policy.md
       </p>
       {!target && (
         <p>
           <button className="pick" disabled={busy} onClick={() => fileRef.current.click()}>
-            {busy ? '조회 중…' : '폐기할 문서 파일 선택… (원장에서 docGuid 조회)'}
+            {busy ? '조회 중…' : '대상 문서 파일 선택… (원장에서 docGuid 조회)'}
           </button>
           <input ref={fileRef} type="file" hidden
             onChange={(e) => e.target.files[0] && lookup(e.target.files[0])} />
@@ -267,17 +271,53 @@ function RevokeSection({ apiKey }) {
           <div className="mono">
             {target.fileName} → docGuid {target.docGuid}
             <br />등급 {target.grade} · {orgLabel(target.issuerOrg)} · 폐기 상태: {target.revocation}
+            {destroyed ? ' (파기됨)' : ''}
           </div>
-          {target.revocation === 'revoked' ? (
-            <p className="error">이미 폐기된 문서입니다.</p>
+          {destroyed ? (
+            <p className="error">이미 파기된 문서입니다 — 사본이 유통 중이라면 게이트가 차단합니다.</p>
           ) : (
-            <p>
-              <input placeholder="폐기 사유 (예: 오분류, 신규 버전으로 대체)"
-                value={reason} onChange={(e) => setReason(e.target.value)}
-                style={{ width: '60%', marginRight: 8 }} />
-              <button className="primary" disabled={busy} onClick={doRevoke}>폐기 등록</button>
-              {' '}<button className="link" onClick={() => setTarget(null)}>취소</button>
-            </p>
+            <>
+              <p>
+                조치:{' '}
+                <select value={action} onChange={(e) => setAction(e.target.value)}>
+                  <option value="">선택…</option>
+                  <option value="regrade">등급 변경 (하향 = 공개 전환)</option>
+                  <option value="revoke" disabled={target.revocation === 'revoked'}>폐기 (유통 정지)</option>
+                  <option value="destroy">파기 (불가역 — 심의 필수)</option>
+                </select>
+              </p>
+              {action === 'regrade' && (
+                <p>
+                  새 등급:{' '}
+                  <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
+                    <option value="S">S — 민감</option>
+                    <option value="O">O — 공개</option>
+                  </select>
+                  {gradeRankJS(newGrade) < gradeRankJS(target.grade) && (
+                    <>{' '}<input type="password" placeholder="하향(공개 전환) 승인 토큰 — 필수"
+                      value={token} onChange={(e) => setToken(e.target.value)} /></>
+                  )}
+                </p>
+              )}
+              {action === 'destroy' && (
+                <p>
+                  <input type="password" placeholder="파기 심의 승인 토큰 — 필수"
+                    value={token} onChange={(e) => setToken(e.target.value)} />
+                  <span className="error"> ⚠ 불가역: 복호화 키가 파기되어 내용에 다시는 접근할 수 없습니다</span>
+                </p>
+              )}
+              {action && (
+                <p>
+                  <input placeholder={action === 'destroy' ? '파기 심의 근거 — 필수' : '사유'}
+                    value={reason} onChange={(e) => setReason(e.target.value)}
+                    style={{ width: '55%', marginRight: 8 }} />
+                  <button className="primary" disabled={busy} onClick={run}>
+                    {action === 'revoke' ? '폐기 등록' : action === 'regrade' ? '등급 변경' : '파기 실행'}
+                  </button>
+                  {' '}<button className="link" onClick={() => { setTarget(null); setAction('') }}>취소</button>
+                </p>
+              )}
+            </>
           )}
         </>
       )}
@@ -285,3 +325,5 @@ function RevokeSection({ apiKey }) {
     </div>
   )
 }
+
+function gradeRankJS(g) { return g === 'S' ? 2 : g === 'O' ? 1 : 0 }

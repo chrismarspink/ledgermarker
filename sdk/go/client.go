@@ -127,6 +127,13 @@ func (c *Client) Regrade(ctx context.Context, docGUID, grade, approvalToken, rea
 	return &out, nil
 }
 
+// Destroy 는 파기다 — 파기 심의 토큰과 심의 근거(reason)가 필수다.
+// 불가역이며, 원장 증적(해시·계보)은 영구 보존된다.
+func (c *Client) Destroy(ctx context.Context, docGUID, reason, approvalToken string) error {
+	return c.do(ctx, http.MethodPost, "/v1/labels/"+docGUID+"/destroy", "",
+		map[string]string{"reason": reason, "approvalToken": approvalToken}, nil)
+}
+
 // ── 계보·원장·신뢰목록 ──────────────────────────────────
 
 type LineageNode struct {

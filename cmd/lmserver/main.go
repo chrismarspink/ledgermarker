@@ -28,6 +28,7 @@ func main() {
 	keystoreDir := envOr("LM_KEYSTORE", "./keystore")
 	issuerOrg := envOr("LM_ISSUER_ORG", "DEVORG")
 	regradeToken := os.Getenv("LM_REGRADE_TOKEN")
+	destroyToken := os.Getenv("LM_DESTROY_TOKEN") // 미설정 = 파기 비활성화
 	var apiKeys []string
 	if v := os.Getenv("LM_API_KEYS"); v != "" {
 		apiKeys = strings.Split(v, ",")
@@ -88,6 +89,7 @@ func main() {
 		IssuerOrg:            issuerOrg,
 		APIKeys:              apiKeys,
 		RegradeApprovalToken: regradeToken,
+		DestroyApprovalToken: destroyToken,
 		Treaty:               treatySvc,
 		Logger:               log,
 		RefreshView:          refresh,

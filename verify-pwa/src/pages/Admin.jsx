@@ -34,6 +34,7 @@ export default function AdminPage() {
         <div className="stat"><div className="n">{counts.DERIVE || 0}</div><div className="t">파생 (DERIVE)</div></div>
         <div className="stat"><div className="n">{counts.REGRADE || 0}</div><div className="t">등급변경 (REGRADE)</div></div>
         <div className="stat"><div className="n">{counts.REVOKE || 0}</div><div className="t">폐기 (REVOKE)</div></div>
+        <div className="stat"><div className="n">{counts.DESTROY || 0}</div><div className="t">파기 (DESTROY)</div></div>
       </div>
       <div className="card">
         <h2>최신 체크포인트 (원장 봉인)</h2>

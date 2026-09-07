@@ -91,7 +91,7 @@ func walkUp(ctx context.Context, r Reader, g *Graph, seen map[string]bool, e *le
 	}
 	var parent *ledger.Event
 	for i := len(parents) - 1; i >= 0; i-- {
-		if parents[i].Type != ledger.EventRevoke {
+		if parents[i].Type.IsIssuance() {
 			parent = &parents[i]
 			break
 		}
@@ -114,7 +114,7 @@ func walkDown(ctx context.Context, r Reader, g *Graph, seen map[string]bool, e *
 	}
 	for i := range children {
 		c := &children[i]
-		if c.Type == ledger.EventRevoke {
+		if !c.Type.IsIssuance() {
 			continue
 		}
 		addNode(g, seen, c)

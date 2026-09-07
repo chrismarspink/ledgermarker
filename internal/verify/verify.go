@@ -166,7 +166,7 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 			// 폴백: 이 해시의 가장 최근 발급성 이벤트(ISSUE/REGRADE/DERIVE)
 			if matched == nil {
 				for i := len(events) - 1; i >= 0; i-- {
-					if events[i].Type != ledger.EventRevoke {
+					if events[i].Type.IsIssuance() {
 						matched = &events[i]
 						break
 					}
@@ -188,6 +188,10 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 	// ── 폐기·대체 판정 (원장 이벤트 기준 — 라벨 폐기는 인증서 폐기와 별개) ──
 	if matched != nil && latest != nil {
 		switch {
+		case latest.Type == ledger.EventDestroy:
+			// 파기됨: 사본이 유통 중이라는 뜻 — 원장 증적이 차단 근거다.
+			res.Checks.Revocation = RevRevoked
+			res.Reasons = append(res.Reasons, "destroyed")
 		case latest.Type == ledger.EventRevoke:
 			res.Checks.Revocation = RevRevoked
 			res.Reasons = append(res.Reasons, "label_revoked")
@@ -296,8 +300,20 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 	}
 	res.TranslatedGrade = res.Attribution.Grade // 협정 번역은 Phase 2
 
+	// ── 시한부 공개 전환 신호 (lifecycle-policy.md §2) ──
+	// disclosureCondition 도래는 자동 공개가 아니라 "재분류 절차 개시" 신호다.
+	if effective != nil && !effective.DisclosureCondition.IsZero() &&
+		nowT.After(effective.DisclosureCondition) && res.Attribution.Grade == "S" {
+		res.Reasons = append(res.Reasons, "disclosure_condition_reached_reclassify")
+	}
+
 	// ── verdictHint (참고값 — 게이트 정책이 최종 판정) ──
 	res.VerdictHint = hint(res)
+	for _, r := range res.Reasons {
+		if r == "disclosure_condition_reached_reclassify" && res.VerdictHint == HintAllow {
+			res.VerdictHint = HintReview
+		}
+	}
 	if res.Attribution.ApprovalState == "PROVISIONAL" {
 		// PROVISIONAL은 기관 내부 통행까지만 유효 (§4.2)
 		res.Reasons = append(res.Reasons, "approval_provisional_internal_only")

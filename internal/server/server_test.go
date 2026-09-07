@@ -39,6 +39,7 @@ func setup(t *testing.T) *env {
 		RevokedSerials:       ks.RevokedSerials,
 		IssuerOrg:            "TESTORG",
 		RegradeApprovalToken: "secret-approval-token",
+		DestroyApprovalToken: "destroy-committee-token",
 	})
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
@@ -302,4 +303,56 @@ func TestAPIKeyAuth(t *testing.T) {
 		t.Fatalf("verify must be public: %v %d", err, resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+// 파기(DESTROY): 심의 토큰 없이는 불가, 파기 후 사본 검증은 destroyed/deny,
+// 원장 증적은 남는다 (docs/lifecycle-policy.md §3).
+func TestDestroyLifecycle(t *testing.T) {
+	e := setup(t)
+	resp := e.issue(t, "destroy-doc", "S", "dz")
+
+	// 토큰 없음 → 403
+	err := e.c.Destroy(context.Background(), resp.DocGUID, "보존기간 만료", "")
+	if apiErr, ok := err.(*gatesdk.APIError); !ok || apiErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("destroy without token must be 403, got %v", err)
+	}
+	// 근거 없음 → 400
+	err = e.c.Destroy(context.Background(), resp.DocGUID, "", "destroy-committee-token")
+	if apiErr, ok := err.(*gatesdk.APIError); !ok || apiErr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("destroy without reason must be 400, got %v", err)
+	}
+	// 정상 파기
+	if err := e.c.Destroy(context.Background(), resp.DocGUID,
+		"보존기간 만료·기록물평가심의회 의결", "destroy-committee-token"); err != nil {
+		t.Fatal(err)
+	}
+	// 재파기 → 409
+	err = e.c.Destroy(context.Background(), resp.DocGUID, "again", "destroy-committee-token")
+	if apiErr, ok := err.(*gatesdk.APIError); !ok || apiErr.StatusCode != http.StatusConflict {
+		t.Fatalf("double destroy must be 409, got %v", err)
+	}
+	// 파기된 문서(사본) 검증 → revoked + destroyed + deny
+	res, err := e.c.Verify(context.Background(), gatesdk.VerifyRequest{
+		LabelDER: resp.LabelDER, ContentHash: hashOf("destroy-doc"), Level: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Checks.Revocation != "revoked" || res.VerdictHint != "deny" {
+		t.Fatalf("destroyed doc: %+v %s", res.Checks, res.VerdictHint)
+	}
+	found := false
+	for _, r := range res.Reasons {
+		if r == "destroyed" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reasons must include 'destroyed': %v", res.Reasons)
+	}
+	// 원장 증적 확인 — DESTROY 행이 남아 있다
+	events, _ := e.st.EventsRange(context.Background(), 1, 100)
+	last := events[len(events)-1]
+	if string(last.Type) != "DESTROY" || last.RevokedRef == 0 {
+		t.Fatalf("ledger must keep DESTROY evidence row: %+v", last)
+	}
 }

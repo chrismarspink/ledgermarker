@@ -246,6 +246,85 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDestroy 는 파기다 (docs/lifecycle-policy.md §3).
+// 보존기간 만료 + 파기 심의를 전제로 하며, 심의 토큰 없이는 불가능하다.
+// 동작: (1) KMS에 문서별 DEK 파기 지시(Phase 2 훅), (2) 원장에 DESTROY
+// 이벤트 추가. 원장 행(해시·메타·계보)은 영구 보존된다 — 파기 증적이자
+// 사본 유통 차단 근거.
+func (s *Server) handleDestroy(w http.ResponseWriter, r *http.Request) {
+	docGUID, err := uuid.Parse(r.PathValue("docGuid"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid docGuid")
+		return
+	}
+	var req struct {
+		Reason        string `json:"reason"`        // 파기 심의 근거 — 필수
+		ApprovalToken string `json:"approvalToken"` // 파기 심의 승인 토큰 — 필수
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if s.cfg.DestroyApprovalToken == "" {
+		writeErr(w, http.StatusForbidden, "destroy is disabled: 파기 심의 토큰(LM_DESTROY_TOKEN)이 구성되지 않았습니다")
+		return
+	}
+	if req.ApprovalToken != s.cfg.DestroyApprovalToken {
+		writeErr(w, http.StatusForbidden, "destroy requires a valid 파기 심의 approvalToken")
+		return
+	}
+	if req.Reason == "" {
+		writeErr(w, http.StatusBadRequest, "reason(파기 심의 근거)은 필수입니다")
+		return
+	}
+	latest, err := s.cfg.Store.LatestByDoc(r.Context(), docGUID)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	if latest == nil {
+		writeErr(w, http.StatusNotFound, "document not found in ledger")
+		return
+	}
+	if latest.Type == ledger.EventDestroy {
+		writeErr(w, http.StatusConflict, "already destroyed")
+		return
+	}
+
+	// (1) KMS 키 파기 지시 — 성공해야 원장에 기록한다 (키가 살아 있는데
+	// 파기됐다고 기록하면 안 된다). Phase 1은 KMS 미연동으로 생략된다.
+	if s.cfg.KeyShredder != nil {
+		if err := s.cfg.KeyShredder.DestroyDocumentKey(r.Context(), docGUID.String()); err != nil {
+			writeErr(w, http.StatusInternalServerError, "KMS key destruction failed: "+err.Error())
+			return
+		}
+	} else {
+		s.log.Warn("destroy without KMS shredding (Phase 1 — 키 파기 훅 미연동)", "docGuid", docGUID)
+	}
+
+	// (2) 원장 파기 이벤트
+	ev := &ledger.Event{
+		Type:        ledger.EventDestroy,
+		DocGUID:     docGUID,
+		ContentHash: latest.ContentHash,
+		RootDocID:   latest.RootDocID,
+		IssuerOrg:   s.cfg.IssuerOrg,
+		RevokedRef:  latest.Seq,
+		Reason:      req.Reason,
+		Actor:       "api",
+	}
+	if err := s.writer.Append(r.Context(), ev); err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger append failed")
+		return
+	}
+	s.refreshView(r.Context())
+	s.log.Info("document destroyed", "docGuid", docGUID, "seq", ev.Seq, "ref", latest.Seq)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"docGuid": docGUID.String(), "ledgerSeq": ev.Seq, "destroyedRef": latest.Seq,
+		"note": "원장 증적은 영구 보존됩니다. 이후 이 문서(사본 포함)의 검증은 destroyed/deny로 판정됩니다.",
+	})
+}
+
 // gradeRank: 민감도 순서. 하향(S→O)은 승인 토큰 필수 (T9),
 // 상향(O→S)은 즉시 처리 + 구 라벨 superseded (T10).
 func gradeRank(g string) int {

@@ -56,9 +56,19 @@ type Verifier interface {
 
 // Cipher 는 본문 암호화용 대칭 AEAD다. 개발 구현은 AES-256-GCM,
 // 납품 구현은 ARIA-256-GCM(KCMVP 모듈)으로 교체한다.
+// 파기(crypto-shredding)가 가능하려면 반드시 문서별 DEK로 암호화할 것
+// (docs/lifecycle-policy.md §3).
 type Cipher interface {
 	Seal(plaintext []byte, aad []byte) (ciphertext []byte, err error)
 	Open(ciphertext []byte, aad []byte) (plaintext []byte, err error)
+}
+
+// KeyShredder 는 파기(DESTROY) 시 KMS에 문서별 DEK 파기를 지시한다.
+// Phase 1은 KMS 미연동 — 구현체 없이 인터페이스만 두고, 파기 이벤트는
+// 원장에 기록된다. Phase 2에서 KMS 연동 구현을 꽂는다.
+type KeyShredder interface {
+	// DestroyDocumentKey 는 docGUID의 DEK를 복구 불가능하게 파기한다.
+	DestroyDocumentKey(ctx context.Context, docGUID string) error
 }
 
 // StdSigner 는 LM Signer를 Go 표준 crypto.Signer로 감싼다.

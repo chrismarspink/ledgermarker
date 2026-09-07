@@ -55,7 +55,9 @@ docker compose -f deploy/docker-compose.yml up --build
 | `LM_KEYSTORE` | `./keystore` | 파일 키스토어 (비면 개발 PKI 자동 생성) |
 | `LM_ISSUER_ORG` | `DEVORG` | 발급 기관 식별자 |
 | `LM_API_KEYS` | (없음 = 개발 모드) | 쉼표 구분 API 키 — 비공개 엔드포인트 보호 |
-| `LM_REGRADE_TOKEN` | (없음) | 등급 하향 승인 토큰 |
+| `LM_REGRADE_TOKEN` | (없음) | 등급 하향(공개 전환) 승인 토큰 |
+| `LM_DESTROY_TOKEN` | (없음 = 파기 비활성) | 파기 심의 승인 토큰 — docs/lifecycle-policy.md |
+| `LM_TREATIES` | (없음) | 등가성 협정 JSON 경로 — docs/treaty-policy.md |
 
 ## 테스트 (수용 기준 T1~T13)
 

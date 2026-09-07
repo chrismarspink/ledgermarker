@@ -76,7 +76,7 @@
 | 전이 | 상태 |
 |---|---|
 | 발급·파생 | ✔ 웹 "생성/폐기" 탭, lm issue/scan |
-| 등급변경 (공개 전환 포함) | ✔ API·regrade (하향 승인 토큰 T9), 웹 UI는 Phase 1.5 후보 |
-| 폐기 | ✔ 웹 "생성/폐기" 탭, lm revoke — REVOKE 이벤트 |
-| 시한부 공개 전환 | 라벨 필드(disclosureCondition)만 — 재분류 절차 연동은 Phase 2 |
-| 파기 | 설계만(§3) — KMS·문서별 DEK 도입과 함께 Phase 2 |
+| 등급변경 (공개 전환 포함) | ✔ 웹 수명주기 조치, lm regrade (하향 승인 토큰 T9) |
+| 폐기 | ✔ 웹 수명주기 조치, lm revoke — REVOKE 이벤트 |
+| 시한부 공개 전환 | ✔ 검증이 disclosureCondition 도래를 감지해 재분류 권고(reasons + review) — 재분류 절차 자동화는 Phase 2 |
+| 파기 | ✔ DESTROY 이벤트·파기 심의 토큰(LM_DESTROY_TOKEN)·검증 destroyed/deny·웹·lm destroy — **KMS 키 파기 지시는 인터페이스(crypto.KeyShredder)만, 연동은 Phase 2** |
