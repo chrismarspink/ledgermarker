@@ -1,8 +1,9 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { sha256Hex, bytesToBase64, hexToBytes } from '../lib/hash.js'
+import { sha256Hex, sha256HexBytes, bytesToBase64, hexToBytes } from '../lib/hash.js'
 import { api, getTrustListCached } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
+import { extractEmbedded } from '../lib/embed.js'
 import ResultCard from '../components/ResultCard.jsx'
 
 export default function VerifyPage() {
@@ -41,8 +42,8 @@ export default function VerifyPage() {
       >
         <p><b>문서 파일을 끌어다 놓으세요</b></p>
         <p className="hint">
-          사이드카 라벨(.lmsig)이 있으면 함께 놓으세요. 라벨이 없어도
-          원장 조회(폴백 검증)로 문서 귀속을 확인합니다.
+          라벨 내장 파일은 자동 인식합니다. 사이드카 라벨(.lmsig)이 있으면
+          함께 놓으세요. 라벨이 없어도 원장 조회(폴백 검증)로 귀속을 확인합니다.
         </p>
         <input
           ref={inputRef} type="file" multiple hidden
@@ -77,20 +78,35 @@ async function runVerify(doc, sig) {
   let contentHash = null
   let labelDerB64 = ''
   let label = null
+  let labelSource = '없음'
 
   if (sig) {
     const der = await sig.arrayBuffer()
     labelDerB64 = bytesToBase64(der)
     label = parseLabel(der) // 평문 속성 — 오프라인에서도 읽힌다
+    labelSource = '사이드카(.lmsig)'
   }
   if (doc) {
-    contentHash = await sha256Hex(doc)
+    const buf = await doc.arrayBuffer()
+    const embedded = extractEmbedded(buf)
+    if (embedded) {
+      // 라벨 내장 파일: 트레일러를 떼고 원본 부분만 해시한다
+      contentHash = await sha256HexBytes(embedded.original)
+      if (!sig) {
+        labelDerB64 = bytesToBase64(embedded.der)
+        label = parseLabel(embedded.der.buffer.slice(
+          embedded.der.byteOffset, embedded.der.byteOffset + embedded.der.byteLength))
+        labelSource = '파일 내장(트레일러)'
+      }
+    } else {
+      contentHash = await sha256Hex(doc)
+    }
   } else if (label?.contentHash) {
     contentHash = label.contentHash // 라벨만 제시된 경우
   }
   if (!contentHash) throw new Error('문서 파일 또는 라벨이 필요합니다')
 
-  const meta = { fileName: doc?.name || sig?.name, contentHash, label }
+  const meta = { fileName: doc?.name || sig?.name, contentHash, label, labelSource }
 
   try {
     const res = await api.verify({

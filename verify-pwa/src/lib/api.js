@@ -3,10 +3,11 @@
 // 절대 "검증 실패"로 표시하지 않는다 (DEV SPEC §8.1-4).
 const BASE = import.meta.env.VITE_LM_SERVER || ''
 
-async function req(method, path, body, apiKey) {
+async function req(method, path, body, apiKey, idemKey) {
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
   if (apiKey) headers['X-LM-Key'] = apiKey
+  if (idemKey) headers['Idempotency-Key'] = idemKey
   const resp = await fetch(BASE + path, {
     method,
     headers,
@@ -19,6 +20,7 @@ async function req(method, path, body, apiKey) {
 
 export const api = {
   verify: (payload) => req('POST', '/v1/verify', payload),
+  issue: (payload, apiKey, idemKey) => req('POST', '/v1/labels', payload, apiKey, idemKey),
   lineage: (docGuid, depth = 10, direction = 'both') =>
     req('GET', `/v1/documents/${docGuid}/lineage?depth=${depth}&direction=${direction}`),
   trustList: () => req('GET', '/v1/trust/list'),

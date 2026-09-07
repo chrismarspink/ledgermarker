@@ -1,8 +1,11 @@
 // 파일은 절대 서버로 전송하지 않는다 (DEV SPEC §8.1-1).
 // 브라우저에서 SHA-256을 계산해 해시만 API로 보낸다.
 export async function sha256Hex(file) {
-  const buf = await file.arrayBuffer()
-  const digest = await crypto.subtle.digest('SHA-256', buf)
+  return sha256HexBytes(await file.arrayBuffer())
+}
+
+export async function sha256HexBytes(bufOrBytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bufOrBytes)
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 

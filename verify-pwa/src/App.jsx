@@ -20,6 +20,7 @@ export default function App() {
         <h1>LM Verify</h1>
         <nav>
           <NavLink to="/">검증</NavLink>
+          <NavLink to="/issue">라벨 발급</NavLink>
           <NavLink to="/admin">대시보드</NavLink>
         </nav>
         <span className={online ? 'badge online' : 'badge offline'}>

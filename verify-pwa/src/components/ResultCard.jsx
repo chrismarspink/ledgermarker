@@ -38,7 +38,10 @@ export default function ResultCard({ result }) {
   return (
     <div className="card">
       <h2>{meta.fileName}</h2>
-      <div className="mono">SHA-256 {meta.contentHash}</div>
+      <div className="mono">
+        SHA-256 {meta.contentHash}
+        {meta.labelSource && <> · 라벨: {meta.labelSource}</>}
+      </div>
 
       <div className="attribution">
         <div className={`grade ${grade === 'S' || grade === 'O' ? grade : 'unknown'}`}>{grade}</div>

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -25,6 +26,44 @@ import (
 )
 
 const sidecarExt = ".lmsig" // 사이드카 파일명: <원본파일명>.lmsig (DER)
+
+// 라벨 트레일러 내장 형식 (docs/label-profile.md 부록):
+//
+//	[원본][CMS DER][DER 길이 uint64 BE][매직 "LMLABEL1"]
+//
+// contentHash는 항상 원본 바이트 기준이다.
+const embedMagic = "LMLABEL1"
+
+// splitEmbedded 는 트레일러가 있으면 (원본, DER, true)를 반환한다.
+func splitEmbedded(data []byte) (orig, der []byte, ok bool) {
+	n := len(data)
+	if n < 20 || string(data[n-8:]) != embedMagic {
+		return nil, nil, false
+	}
+	derLen := binary.BigEndian.Uint64(data[n-16 : n-8])
+	if derLen == 0 || derLen > uint64(n-16) {
+		return nil, nil, false
+	}
+	cut := n - 16 - int(derLen)
+	return data[:cut], data[cut : n-16], true
+}
+
+// appendTrailer 는 파일 끝에 라벨 트레일러를 덧붙인다 (원본 내용 불변).
+func appendTrailer(path string, der []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	lenBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(lenBuf, uint64(len(der)))
+	for _, b := range [][]byte{der, lenBuf, []byte(embedMagic)} {
+		if _, err := f.Write(b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 var (
 	flagServer string
@@ -63,19 +102,27 @@ func cmdIssue() *cobra.Command {
 	var req gatesdk.IssueRequest
 	var parent, approval string
 	var force bool
+	var embed bool
 	c := &cobra.Command{
 		Use:   "issue <파일>",
-		Short: "단일 파일 라벨 발급 (사이드카 .lmsig 생성 — 원본은 수정하지 않음)",
+		Short: "단일 파일 라벨 발급 (기본: .lmsig 사이드카, --embed: 파일에 트레일러 내장)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			path := args[0]
-			if _, err := os.Stat(path + sidecarExt); err == nil && !force {
-				return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
-			}
-			hash, err := hashFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
-				return fmt.Errorf("해시 계산: %w", err)
+				return fmt.Errorf("파일 읽기: %w", err)
 			}
+			if _, _, ok := splitEmbedded(data); ok {
+				return fmt.Errorf("%s 에는 이미 라벨이 내장되어 있습니다 (lm verify로 확인)", path)
+			}
+			if !embed {
+				if _, err := os.Stat(path + sidecarExt); err == nil && !force {
+					return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
+				}
+			}
+			sum := sha256.Sum256(data)
+			hash := hex.EncodeToString(sum[:])
 			req.ContentHash = hash
 			if approval != "" {
 				req.ApprovalState = strings.ToUpper(approval)
@@ -97,10 +144,21 @@ func cmdIssue() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writeSidecar(path, resp.LabelDER); err != nil {
-				return fmt.Errorf("사이드카 쓰기: %w", err)
+			if embed {
+				der, err := base64.StdEncoding.DecodeString(resp.LabelDER)
+				if err != nil {
+					return fmt.Errorf("labelDer 디코드: %w", err)
+				}
+				if err := appendTrailer(path, der); err != nil {
+					return fmt.Errorf("트레일러 내장: %w", err)
+				}
+				fmt.Printf("발급 완료 (파일에 내장): %s\n", path)
+			} else {
+				if err := writeSidecar(path, resp.LabelDER); err != nil {
+					return fmt.Errorf("사이드카 쓰기: %w", err)
+				}
+				fmt.Printf("발급 완료: %s%s\n", path, sidecarExt)
 			}
-			fmt.Printf("발급 완료: %s%s\n", path, sidecarExt)
 			fmt.Printf("  docGuid=%s seq=%d 등급=%s 유효기간=%s\n",
 				resp.DocGUID, resp.LedgerSeq, req.Grade, resp.NotAfter.Format("2006-01-02"))
 			if resp.RootDocID != "" && resp.RootDocID != resp.DocGUID {
@@ -119,6 +177,7 @@ func cmdIssue() *cobra.Command {
 	c.Flags().StringVar(&req.DocGUID, "doc-guid", "", "docGuid 직접 지정 (기본: 서버 생성)")
 	c.Flags().IntVar(&req.NotAfterDays, "not-after-days", 365, "라벨 유효기간(일)")
 	c.Flags().BoolVar(&force, "force", false, "기존 사이드카 덮어쓰기(재발급)")
+	c.Flags().BoolVar(&embed, "embed", false, "사이드카 대신 파일 끝에 라벨 트레일러 내장 (원본 내용 불변, 검증 시 자동 인식)")
 	transformFlag := c.Flags().String("transform", "edit", "--parent 지정 시 변환 종류 (edit|convert|merge|extract)")
 	c.PreRun = func(_ *cobra.Command, _ []string) {
 		if parent != "" {
@@ -196,13 +255,22 @@ func cmdVerify() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			exit := 0
 			for _, path := range args {
-				hash, err := hashFile(path)
+				data, err := os.ReadFile(path)
 				if err != nil {
-					return fmt.Errorf("해시 계산 %s: %w", path, err)
+					return fmt.Errorf("파일 읽기 %s: %w", path, err)
 				}
-				req := gatesdk.VerifyRequest{ContentHash: hash, Level: level}
-				if der, err := os.ReadFile(path + sidecarExt); err == nil {
-					req.LabelDER = base64.StdEncoding.EncodeToString(der)
+				req := gatesdk.VerifyRequest{Level: level}
+				if orig, embDer, ok := splitEmbedded(data); ok {
+					// 라벨 내장 파일: 트레일러를 떼고 원본 부분만 해시
+					sum := sha256.Sum256(orig)
+					req.ContentHash = hex.EncodeToString(sum[:])
+					req.LabelDER = base64.StdEncoding.EncodeToString(embDer)
+				} else {
+					sum := sha256.Sum256(data)
+					req.ContentHash = hex.EncodeToString(sum[:])
+					if der, err := os.ReadFile(path + sidecarExt); err == nil {
+						req.LabelDER = base64.StdEncoding.EncodeToString(der)
+					}
 				}
 				res, err := client().Verify(context.Background(), req)
 				if err != nil {
