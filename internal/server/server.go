@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/labels/{docGuid}/regrade", s.auth(s.handleRegrade))
 	mux.HandleFunc("POST /v1/checkpoints", s.auth(s.handleSealCheckpoint))
 	mux.HandleFunc("GET /v1/ledger/verify", s.auth(s.handleLedgerVerify))
+	mux.HandleFunc("GET /v1/ledger/events", s.auth(s.handleLedgerEvents))
 	mux.HandleFunc("POST /v1/trust/import", s.auth(s.handleTrustImport))
 	mux.HandleFunc("POST /v1/batch/scan", s.auth(s.handleBatchScan))
 	mux.HandleFunc("GET /v1/batch/{jobId}", s.auth(s.handleBatchStatus))

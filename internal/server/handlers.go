@@ -131,6 +131,77 @@ func (s *Server) handleLedgerVerify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleLedgerEvents 는 원장 열람이다 (읽기 전용 — 원장은 조회만 가능하다).
+// ?from=&to=&limit= — 기본: 최근 limit(50)행. label_der는 크기 때문에 제외.
+func (s *Server) handleLedgerEvents(w http.ResponseWriter, r *http.Request) {
+	from, _ := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
+	to, _ := strconv.ParseInt(r.URL.Query().Get("to"), 10, 64)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	tip, _, err := s.cfg.Store.Tip(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	if to == 0 || to > tip {
+		to = tip
+	}
+	if from == 0 {
+		from = to - int64(limit) + 1
+	}
+	if from < 1 {
+		from = 1
+	}
+	var events []ledger.Event
+	if to >= from {
+		events, err = s.cfg.Store.EventsRange(r.Context(), from, to)
+		if err != nil {
+			writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+			return
+		}
+	}
+	out := make([]map[string]interface{}, 0, len(events))
+	for i := range events {
+		e := &events[i]
+		row := map[string]interface{}{
+			"seq":         e.Seq,
+			"eventType":   string(e.Type),
+			"docGuid":     e.DocGUID.String(),
+			"contentHash": hex.EncodeToString(e.ContentHash),
+			"grade":       e.Grade,
+			"issuerOrg":   e.IssuerOrg,
+			"actor":       e.Actor,
+			"rowHash":     hex.EncodeToString(e.RowHash),
+			"prevHash":    hex.EncodeToString(e.PrevHash),
+			"createdAt":   e.CreatedAt,
+		}
+		if e.ApprovalState != "" {
+			row["approvalState"] = e.ApprovalState
+		}
+		if len(e.ParentHash) > 0 {
+			row["parentHash"] = hex.EncodeToString(e.ParentHash)
+		}
+		if e.RootDocID != uuid.Nil {
+			row["rootDocId"] = e.RootDocID.String()
+		}
+		if e.Transform != "" {
+			row["transform"] = e.Transform
+		}
+		if e.RevokedRef != 0 {
+			row["revokedRef"] = e.RevokedRef
+		}
+		if e.Reason != "" {
+			row["reason"] = e.Reason
+		}
+		out = append(out, row)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tip": tip, "from": from, "to": to, "events": out,
+	})
+}
+
 // handleTrustList 는 PWA가 오프라인 캐시하는 신뢰목록이다.
 func (s *Server) handleTrustList(w http.ResponseWriter, r *http.Request) {
 	anchors, err := s.cfg.Store.TrustAnchors(r.Context())

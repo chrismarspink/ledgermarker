@@ -466,7 +466,51 @@ func cmdLedger() *cobra.Command {
 	}
 	ckptCmd.Flags().BoolVar(&sign, "sign", false, "새 체크포인트 서명·발행 (없으면 최신 조회)")
 
-	c.AddCommand(verifyCmd, ckptCmd)
+	var lFrom, lTo int64
+	var lLimit int
+	var lJSON bool
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "원장 열람 (파일 해시가 기록된 레지스트리 — 기본: 최근 50행)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			page, err := client().LedgerEvents(context.Background(), lFrom, lTo, lLimit)
+			if err != nil {
+				return err
+			}
+			if lJSON {
+				out, _ := json.MarshalIndent(page, "", "  ")
+				fmt.Println(string(out))
+				return nil
+			}
+			fmt.Printf("원장 tip=%d · 표시 구간 seq %d~%d\n", page.Tip, page.From, page.To)
+			fmt.Printf("%-5s %-8s %-2s %-13s %-13s %-16s %s\n",
+				"seq", "이벤트", "등급", "docGuid", "contentHash", "actor", "created(UTC)")
+			for _, e := range page.Events {
+				extra := ""
+				if e.RevokedRef != 0 {
+					extra = fmt.Sprintf(" →ref %d", e.RevokedRef)
+				}
+				if e.Transform != "" {
+					extra += " ←" + e.Transform
+				}
+				actor := e.Actor
+				if len(actor) > 16 {
+					actor = actor[:15] + "…"
+				}
+				fmt.Printf("%-5d %-8s %-2s %-13s %-13s %-16s %s%s\n",
+					e.Seq, e.EventType, e.Grade,
+					e.DocGUID[:8]+"…", e.ContentHash[:12]+"…",
+					actor, e.CreatedAt.Format("2006-01-02 15:04:05"), extra)
+			}
+			return nil
+		},
+	}
+	listCmd.Flags().Int64Var(&lFrom, "from", 0, "시작 seq (0=자동)")
+	listCmd.Flags().Int64Var(&lTo, "to", 0, "끝 seq (0=tip)")
+	listCmd.Flags().IntVar(&lLimit, "limit", 50, "최대 행 수 (최대 500)")
+	listCmd.Flags().BoolVar(&lJSON, "json", false, "JSON 출력 (전체 필드·해시 원문 포함)")
+
+	c.AddCommand(verifyCmd, ckptCmd, listCmd)
 	return c
 }
 

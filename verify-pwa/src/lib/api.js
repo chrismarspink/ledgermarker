@@ -25,7 +25,9 @@ export const api = {
     req('GET', `/v1/documents/${docGuid}/lineage?depth=${depth}&direction=${direction}`),
   trustList: () => req('GET', '/v1/trust/list'),
   latestCheckpoint: () => req('GET', '/v1/checkpoints/latest'),
-  adminStats: (apiKey) => req('GET', '/v1/admin/stats', null, apiKey)
+  adminStats: (apiKey) => req('GET', '/v1/admin/stats', null, apiKey),
+  ledgerEvents: (apiKey, limit = 50) =>
+    req('GET', `/v1/ledger/events?limit=${limit}`, null, apiKey)
 }
 
 // 신뢰목록은 Service Worker 캐시 + localStorage 이중 보관 —

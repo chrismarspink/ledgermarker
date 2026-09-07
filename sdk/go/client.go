@@ -177,6 +177,43 @@ func (c *Client) LedgerVerify(ctx context.Context, from, to int64) (*LedgerVerif
 	return &out, nil
 }
 
+// LedgerEventRow 는 원장 열람 행이다 (label_der 제외).
+type LedgerEventRow struct {
+	Seq           int64     `json:"seq"`
+	EventType     string    `json:"eventType"`
+	DocGUID       string    `json:"docGuid"`
+	ContentHash   string    `json:"contentHash"`
+	Grade         string    `json:"grade,omitempty"`
+	ApprovalState string    `json:"approvalState,omitempty"`
+	ParentHash    string    `json:"parentHash,omitempty"`
+	RootDocID     string    `json:"rootDocId,omitempty"`
+	Transform     string    `json:"transform,omitempty"`
+	IssuerOrg     string    `json:"issuerOrg"`
+	RevokedRef    int64     `json:"revokedRef,omitempty"`
+	Reason        string    `json:"reason,omitempty"`
+	Actor         string    `json:"actor"`
+	RowHash       string    `json:"rowHash"`
+	PrevHash      string    `json:"prevHash"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type LedgerEventsPage struct {
+	Tip    int64            `json:"tip"`
+	From   int64            `json:"from"`
+	To     int64            `json:"to"`
+	Events []LedgerEventRow `json:"events"`
+}
+
+// LedgerEvents 는 원장을 열람한다. from/to=0 이면 최근 limit행.
+func (c *Client) LedgerEvents(ctx context.Context, from, to int64, limit int) (*LedgerEventsPage, error) {
+	var out LedgerEventsPage
+	path := fmt.Sprintf("/v1/ledger/events?from=%d&to=%d&limit=%d", from, to, limit)
+	if err := c.do(ctx, http.MethodGet, path, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 type Checkpoint struct {
 	CkptID       int64     `json:"ckptId"`
 	FromSeq      int64     `json:"fromSeq"`

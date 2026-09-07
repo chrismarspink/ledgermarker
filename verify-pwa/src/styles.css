@@ -74,3 +74,11 @@ button.primary { background: var(--navy); color: #fff; border: none; border-radi
 button.primary:disabled { opacity: .4; cursor: default; }
 button.pick { padding: 7px 10px; border: 1px dashed #c3cad6; border-radius: 8px; background: #fafbfc; cursor: pointer; text-align: left; }
 a.download { display: inline-block; background: var(--ok); color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; }
+
+/* 원장 열람 테이블 */
+.tablewrap { overflow-x: auto; }
+table.ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.ledger th, table.ledger td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.ledger th { color: var(--muted); font-weight: 600; font-size: 12px; }
+table.ledger tr.revoked td { color: var(--bad); }
+table.ledger td.mono { font-family: ui-monospace, monospace; font-size: 12px; }
