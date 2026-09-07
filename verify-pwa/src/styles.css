@@ -82,3 +82,13 @@ table.ledger th, table.ledger td { padding: 6px 10px; border-bottom: 1px solid v
 table.ledger th { color: var(--muted); font-weight: 600; font-size: 12px; }
 table.ledger tr.revoked td { color: var(--bad); }
 table.ledger td.mono { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* 공격 시나리오 */
+.scenario { margin: 22px 0; padding-left: 14px; border-left: 4px solid var(--line); }
+.scenario.caught { border-left-color: var(--ok); }
+.scenario.missed { border-left-color: var(--bad); }
+.scenario-head { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.scenario-no { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+.badge-caught { font-size: 12px; font-weight: 700; color: var(--ok); background: #e6f4ec; border-radius: 999px; padding: 3px 10px; }
+.badge-missed { font-size: 12px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 999px; padding: 3px 10px; }
+.badge-base { font-size: 12px; font-weight: 700; color: var(--muted); background: #eef1f6; border-radius: 999px; padding: 3px 10px; }
