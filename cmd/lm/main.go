@@ -47,13 +47,85 @@ func main() {
 	root.PersistentFlags().StringVar(&flagAPIKey, "api-key",
 		os.Getenv("LM_API_KEY"), "X-LM-Key API 키")
 
-	root.AddCommand(cmdScan(), cmdVerify(), cmdLineage(), cmdRevoke(),
+	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdLineage(), cmdRevoke(),
 		cmdLedger(), cmdTrust())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
 		os.Exit(1)
 	}
+}
+
+// ── lm issue 문서.hwp --grade S ────────────────────────────
+// 단일 파일 라벨 발급. 파일은 수정하지 않고 <파일>.lmsig 사이드카를 만든다.
+
+func cmdIssue() *cobra.Command {
+	var req gatesdk.IssueRequest
+	var parent, approval string
+	var force bool
+	c := &cobra.Command{
+		Use:   "issue <파일>",
+		Short: "단일 파일 라벨 발급 (사이드카 .lmsig 생성 — 원본은 수정하지 않음)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			path := args[0]
+			if _, err := os.Stat(path + sidecarExt); err == nil && !force {
+				return fmt.Errorf("%s%s 가 이미 있습니다. 재발급하려면 --force", path, sidecarExt)
+			}
+			hash, err := hashFile(path)
+			if err != nil {
+				return fmt.Errorf("해시 계산: %w", err)
+			}
+			req.ContentHash = hash
+			if approval != "" {
+				req.ApprovalState = strings.ToUpper(approval)
+			}
+			// --parent: 부모 파일 경로 또는 64자 hex 해시 → 선언적 계보
+			if parent != "" {
+				ph := parent
+				if len(parent) != 64 {
+					if ph, err = hashFile(parent); err != nil {
+						return fmt.Errorf("부모 파일 해시: %w", err)
+					}
+				}
+				if req.Lineage == nil {
+					req.Lineage = &gatesdk.LineageDecl{}
+				}
+				req.Lineage.ParentHash = ph
+			}
+			resp, err := client().IssueLabel(context.Background(), req, "issue:"+hash)
+			if err != nil {
+				return err
+			}
+			if err := writeSidecar(path, resp.LabelDER); err != nil {
+				return fmt.Errorf("사이드카 쓰기: %w", err)
+			}
+			fmt.Printf("발급 완료: %s%s\n", path, sidecarExt)
+			fmt.Printf("  docGuid=%s seq=%d 등급=%s 유효기간=%s\n",
+				resp.DocGUID, resp.LedgerSeq, req.Grade, resp.NotAfter.Format("2006-01-02"))
+			if resp.RootDocID != "" && resp.RootDocID != resp.DocGUID {
+				fmt.Printf("  최초 조상=%s\n", resp.RootDocID)
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&req.Grade, "grade", "O", "등급 (S|O — C는 체계 범위 밖)")
+	c.Flags().IntVar(&req.BasisClause, "basis-clause", 0, "정보공개법 9조 호수 (1~8)")
+	c.Flags().StringSliceVar(&req.BasisKeywords, "keyword", nil, "판정 근거 키워드 (반복 지정 가능)")
+	c.Flags().StringVar(&req.BRMPath, "brm", "", "업무 분류 경로")
+	c.Flags().StringVar(&approval, "approval", "", "승인 상태 (CONFIRMED|PROVISIONAL, 기본 CONFIRMED)")
+	c.Flags().StringVar(&req.ApproverRank, "approver-rank", "", "결재권자 직급")
+	c.Flags().StringVar(&parent, "parent", "", "부모 문서 (파일 경로 또는 SHA-256 hex) — 선언적 계보")
+	c.Flags().StringVar(&req.DocGUID, "doc-guid", "", "docGuid 직접 지정 (기본: 서버 생성)")
+	c.Flags().IntVar(&req.NotAfterDays, "not-after-days", 365, "라벨 유효기간(일)")
+	c.Flags().BoolVar(&force, "force", false, "기존 사이드카 덮어쓰기(재발급)")
+	transformFlag := c.Flags().String("transform", "edit", "--parent 지정 시 변환 종류 (edit|convert|merge|extract)")
+	c.PreRun = func(_ *cobra.Command, _ []string) {
+		if parent != "" {
+			req.Lineage = &gatesdk.LineageDecl{Transform: *transformFlag}
+		}
+	}
+	return c
 }
 
 // ── lm scan ./문서고 --issue --recursive --grade O ─────────

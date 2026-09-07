@@ -30,6 +30,8 @@ go build -o bin/lmserver ./cmd/lmserver && ./bin/lmserver
 
 # 2) CLI
 go build -o bin/lm ./cmd/lm
+./bin/lm issue 문서.hwp --grade S             # 단일 파일 라벨 발급 (.lmsig 사이드카)
+./bin/lm issue 요약.hwp --grade O --parent 문서.hwp --transform extract  # 파생본
 ./bin/lm scan ./문서고 --issue --grade S      # 소급 라벨링 (.lmsig 사이드카 생성)
 ./bin/lm verify 문서.pdf --level 2            # 5개 체크 항목 표시
 ./bin/lm lineage 문서.pdf --tree              # 족보

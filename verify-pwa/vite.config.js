@@ -41,7 +41,7 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/v1': 'http://localhost:8080'
+      '/v1': process.env.LM_PROXY_TARGET || 'http://localhost:8080'
     }
   }
 })
