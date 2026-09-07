@@ -21,7 +21,7 @@ export default function App() {
         <nav>
           <NavLink to="/" end>대시보드</NavLink>
           <NavLink to="/keys">키 관리</NavLink>
-          <NavLink to="/issue">생성</NavLink>
+          <NavLink to="/issue">생성/폐기</NavLink>
           <NavLink to="/ledger">원장</NavLink>
           <NavLink to="/verify">검증</NavLink>
         </nav>

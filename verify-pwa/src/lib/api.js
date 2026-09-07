@@ -21,6 +21,8 @@ async function req(method, path, body, apiKey, idemKey) {
 export const api = {
   verify: (payload) => req('POST', '/v1/verify', payload),
   issue: (payload, apiKey, idemKey) => req('POST', '/v1/labels', payload, apiKey, idemKey),
+  revoke: (docGuid, reason, apiKey) =>
+    req('POST', `/v1/labels/${docGuid}/revoke`, { reason }, apiKey),
   lineage: (docGuid, depth = 10, direction = 'both') =>
     req('GET', `/v1/documents/${docGuid}/lineage?depth=${depth}&direction=${direction}`),
   trustList: () => req('GET', '/v1/trust/list'),

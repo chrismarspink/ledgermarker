@@ -2,6 +2,7 @@ import React from 'react'
 import { sha256Hex, sha256HexBytes } from '../lib/hash.js'
 import { api } from '../lib/api.js'
 import { extractEmbedded, embedLabel } from '../lib/embed.js'
+import { orgLabel } from '../lib/orgs.js'
 
 // 라벨 발급 페이지 — 파일에 라벨을 내장(트레일러 방식)해 내려준다.
 // 파일 본문은 서버로 전송하지 않는다: 해시만 보내고, 서명(라벨)만 받아
@@ -155,6 +156,8 @@ export default function IssuePage() {
         {error && <p className="error">{error}</p>}
       </div>
 
+      <RevokeSection apiKey={apiKey} />
+
       {done && (
         <div className="card">
           <h2>발급 완료</h2>
@@ -180,6 +183,105 @@ export default function IssuePage() {
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── 라벨 폐기 (REVOKE) ─────────────────────────────────────
+// 폐기는 "유통 정지"이지 "공개 전환"이 아니다 — 본문 비밀성은 유지되고,
+// 원장에 REVOKE 이벤트가 추가될 뿐 어떤 것도 삭제되지 않는다.
+// 공개 전환은 승인 토큰을 동반한 REGRADE(S→O)로만 가능하다.
+// 상세: docs/lifecycle-policy.md
+function RevokeSection({ apiKey }) {
+  const [target, setTarget] = React.useState(null) // {docGuid, grade, issuerOrg, revocation, fileName}
+  const [reason, setReason] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [msg, setMsg] = React.useState(null) // {ok, text}
+  const fileRef = React.useRef()
+
+  async function lookup(file) {
+    setMsg(null)
+    setTarget(null)
+    setBusy(true)
+    try {
+      const buf = await file.arrayBuffer()
+      const emb = extractEmbedded(buf)
+      const contentHash = emb ? await sha256HexBytes(emb.original) : await sha256HexBytes(buf)
+      const res = await api.verify({ contentHash, level: 2 })
+      if (!res.attribution?.docGuid) {
+        throw new Error(`원장에서 문서를 찾지 못했습니다 (ledger=${res.checks.ledger})`)
+      }
+      setTarget({
+        fileName: file.name,
+        docGuid: res.attribution.docGuid,
+        grade: res.attribution.grade,
+        issuerOrg: res.attribution.issuerOrg,
+        revocation: res.checks.revocation
+      })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRevoke() {
+    setBusy(true)
+    setMsg(null)
+    try {
+      await api.revoke(target.docGuid, reason, apiKey)
+      setMsg({
+        ok: true,
+        text: `폐기 등록 완료 — 원장에 REVOKE 이벤트가 추가되었습니다. ` +
+          `이후 이 문서(및 사본)의 검증은 revoked/deny로 판정됩니다. ` +
+          `본문 비밀성은 유지되며, 공개가 필요하면 별도의 등급 하향(REGRADE) 절차를 밟으세요.`
+      })
+      setTarget(null)
+      setReason('')
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>라벨 폐기 (REVOKE)</h2>
+      <p className="hint">
+        폐기 = 유통 정지. 원장에 이벤트가 추가될 뿐 아무것도 삭제되지 않으며(추가 전용),
+        본문은 <b>공개로 전환되지 않습니다</b>. 복호화 키 파기(파기 절차)는 보존기간
+        만료·심의를 거치는 별도 단계입니다 — docs/lifecycle-policy.md 참조.
+      </p>
+      {!target && (
+        <p>
+          <button className="pick" disabled={busy} onClick={() => fileRef.current.click()}>
+            {busy ? '조회 중…' : '폐기할 문서 파일 선택… (원장에서 docGuid 조회)'}
+          </button>
+          <input ref={fileRef} type="file" hidden
+            onChange={(e) => e.target.files[0] && lookup(e.target.files[0])} />
+        </p>
+      )}
+      {target && (
+        <>
+          <div className="mono">
+            {target.fileName} → docGuid {target.docGuid}
+            <br />등급 {target.grade} · {orgLabel(target.issuerOrg)} · 폐기 상태: {target.revocation}
+          </div>
+          {target.revocation === 'revoked' ? (
+            <p className="error">이미 폐기된 문서입니다.</p>
+          ) : (
+            <p>
+              <input placeholder="폐기 사유 (예: 오분류, 신규 버전으로 대체)"
+                value={reason} onChange={(e) => setReason(e.target.value)}
+                style={{ width: '60%', marginRight: 8 }} />
+              <button className="primary" disabled={busy} onClick={doRevoke}>폐기 등록</button>
+              {' '}<button className="link" onClick={() => setTarget(null)}>취소</button>
+            </p>
+          )}
+        </>
+      )}
+      {msg && <p className={msg.ok ? 'hint' : 'error'}>{msg.text}</p>}
     </div>
   )
 }
