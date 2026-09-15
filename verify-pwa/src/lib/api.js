@@ -34,6 +34,7 @@ export const api = {
   keys: () => req('GET', '/v1/keys'),
   treaties: () => req('GET', '/v1/treaties'),
   formats: () => req('GET', '/v1/formats'),
+  labelByHash: (hashHex) => req('GET', `/v1/labels/by-hash/${hashHex}`),
   // 파일을 업로드하지 않는다 — 파일명과 앞 16바이트 매직넘버만 (§3.2)
   formatsResolve: (filename, magicHex) =>
     req('POST', '/v1/formats/resolve', { filename, magicHex }),

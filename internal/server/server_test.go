@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
+	"github.com/innotium/ledgermarker/internal/fingerprint"
 	"github.com/innotium/ledgermarker/internal/ledger"
 	"github.com/innotium/ledgermarker/internal/server"
 	"github.com/innotium/ledgermarker/internal/store"
@@ -354,5 +357,58 @@ func TestDestroyLifecycle(t *testing.T) {
 	last := events[len(events)-1]
 	if string(last.Type) != "DESTROY" || last.RevokedRef == 0 {
 		t.Fatalf("ledger must keep DESTROY evidence row: %+v", last)
+	}
+}
+
+// 관찰적 재식별 + 라벨 복원 — 공모 시나리오 ③④⑥의 서버 측.
+func TestIdentifyAndRestore(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	text := `제1조(목적) 이 규정은 문서 등급 표시와 검증 체계 운영에 필요한 사항을 정한다.
+제2조(정의) 라벨이란 문서에 부여된 서명된 등급 표시를 말한다.
+제3조(발급) 문서 생산 부서의 장은 지체 없이 라벨 발급을 요청하여야 한다.
+제4조(검증) 게이트 운영 부서는 반출 전 라벨을 검증하여야 한다.`
+
+	mh := base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(text)))
+	resp, err := e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf(text), Grade: "S",
+		Fingerprint: &gatesdk.FingerprintDecl{MinHash: mh},
+	}, "fp1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ④ 일부 수정본 → 지문으로 원본 후보 식별
+	modified := strings.Replace(text, "지체 없이", "3일 이내에", 1) + "\n제5조(부칙) 이 규정은 공포한 날부터 시행한다."
+	mhMod := base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(modified)))
+	cands, err := e.c.Identify(ctx, mhMod, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) == 0 || cands[0].DocGUID != resp.DocGUID {
+		t.Fatalf("modified doc must identify original: %+v", cands)
+	}
+	if cands[0].Similarity < 0.5 || cands[0].Grade != "S" {
+		t.Fatalf("candidate: %+v", cands[0])
+	}
+
+	// 무관 문서는 후보에 없어야 한다
+	other := "오늘 점심은 김치찌개. 내일은 비가 온다고 한다. 주말에는 등산."
+	mhOther := base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(other)))
+	if cands, _ := e.c.Identify(ctx, mhOther, 5); len(cands) != 0 {
+		t.Fatalf("unrelated doc must not match: %+v", cands)
+	}
+
+	// ⑥ 라벨 복원: 해시로 라벨 원본 회수
+	info, err := e.c.LabelByHash(ctx, hashOf(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.LabelDER != resp.LabelDER || info.DocGUID != resp.DocGUID || info.Grade != "S" {
+		t.Fatal("restored label must equal issued label")
+	}
+	// 미등록 해시 → 404
+	if _, err := e.c.LabelByHash(ctx, hashOf("없는 문서")); err == nil {
+		t.Fatal("unknown hash must 404")
 	}
 }

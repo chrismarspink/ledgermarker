@@ -23,6 +23,7 @@ type Memory struct {
 	checkpoints []ledger.Checkpoint
 	idem        map[string][]byte
 	anchors     []TrustAnchor
+	fps         []memFP
 
 	// Unavailable 이 true면 원장 조회가 에러를 반환한다 —
 	// "unavailable"(접속 불가)과 "unregistered"(없음)의 구분 테스트용.
@@ -174,6 +175,40 @@ func (m *Memory) AddTrustAnchor(_ context.Context, ta *TrustAnchor) error {
 	ta.AddedAt = time.Now().UTC()
 	m.anchors = append(m.anchors, *ta)
 	return nil
+}
+
+type memFP struct {
+	doc     uuid.UUID
+	minhash []byte
+	bucket  string
+}
+
+func (m *Memory) InsertFingerprint(_ context.Context, docGUID uuid.UUID, minhash []byte, buckets []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, b := range buckets {
+		m.fps = append(m.fps, memFP{doc: docGUID, minhash: minhash, bucket: b})
+	}
+	return nil
+}
+
+func (m *Memory) FingerprintCandidates(_ context.Context, buckets []string) (map[uuid.UUID][]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.Unavailable {
+		return nil, ErrUnavailable
+	}
+	want := map[string]bool{}
+	for _, b := range buckets {
+		want[b] = true
+	}
+	out := map[uuid.UUID][]byte{}
+	for _, fp := range m.fps {
+		if want[fp.bucket] {
+			out[fp.doc] = fp.minhash
+		}
+	}
+	return out, nil
 }
 
 func (m *Memory) EventCounts(_ context.Context) (map[string]int64, error) {

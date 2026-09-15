@@ -1,6 +1,6 @@
 import React from 'react'
 import { api } from '../lib/api.js'
-import { analyzeFile, buildEmbedded } from '../lib/attach.js'
+import { analyzeFile, buildEmbedded, zipAttach } from '../lib/attach.js'
 import { orgLabel } from '../lib/orgs.js'
 import { METHOD_KO } from './Help.jsx'
 import { Link } from 'react-router-dom'
@@ -41,13 +41,23 @@ export default function IssuePage() {
       const format = analysis.format
       const contentHash = analysis.contentHash
 
-      // 부착 방식 결정 (폴백 규칙): 지원 내장 → 파일 안에, 준비 중 → 사이드카
+      // 부착 방식 결정 (폴백 규칙): 지원 내장/컨테이너 → 파일 안에, 준비 중 → 사이드카
       let method = 'sidecar'
       let fallbackReason = ''
-      const canEmbed = format.method === 'embedded' && format.status === 'supported'
+      let canEmbed = (format.method === 'embedded' || format.method === 'container') &&
+        format.status === 'supported'
+      if (canEmbed && format.method === 'container') {
+        // 내장 사전 검사 (예: ZIP 코멘트가 이미 사용 중) — 실패해도 발급은 사이드카로 계속
+        try {
+          zipAttach(new Uint8Array(buf), new Uint8Array([0x30]))
+        } catch {
+          canEmbed = false
+          fallbackReason = 'attach_failed'
+        }
+      }
       if (canEmbed) {
-        method = 'embedded'
-      } else if (format.method === 'embedded' || format.method === 'container') {
+        method = format.method
+      } else if (!fallbackReason && (format.method === 'embedded' || format.method === 'container')) {
         fallbackReason = 'not_implemented'
       }
 
@@ -191,7 +201,9 @@ export default function IssuePage() {
             <p className="hint">
               {done.fallbackReason === 'not_implemented'
                 ? '이 형식은 파일 안에 넣는 방식이 준비 중이라, 지금은 옆에 별도 파일(.lmsig)로 붙입니다.'
-                : '이 형식은 옆에 별도 파일(.lmsig)로 붙입니다.'}
+                : done.fallbackReason === 'attach_failed'
+                  ? '파일 안에 넣기가 실패해(예: ZIP 코멘트가 이미 사용 중) 옆에 별도 파일(.lmsig)로 붙입니다.'
+                  : '이 형식은 옆에 별도 파일(.lmsig)로 붙입니다.'}
               {done.format.warning && <> ⚠ {done.format.warning}</>}
             </p>
           )}

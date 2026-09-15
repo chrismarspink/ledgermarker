@@ -39,12 +39,18 @@ type Resolution struct {
 
 // impls 는 formats.yaml id → 구현 매핑이다. 여기 없는 embedded/container
 // 포맷은 사이드카로 폴백된다("not_implemented").
-// Phase 1-b에서 zip/cfb/pdf(증분 갱신) Attacher가 추가된다 (§2.3).
 func implFor(f Format) Attacher {
 	switch f.ID {
 	case "markdown":
 		return &textAttacher{format: f}
 	case "pdf", "jpeg", "png":
+		return &trailerAttacher{format: f}
+	case "ooxml", "hwpx", "odf", "zip":
+		// ZIP 아카이브 코멘트 내장 (Phase 1-b)
+		return &zipAttacher{format: f}
+	case "hwp", "msg":
+		// CFB 파서는 섹터 기반이라 꼬리 데이터를 무시한다 → 트레일러 내장.
+		// CFB 내부 LMLabel 스트림 삽입은 한글 재저장 보존 실측 후 (Phase 2 ✎)
 		return &trailerAttacher{format: f}
 	}
 	return nil

@@ -87,6 +87,51 @@ export function mdAttach(str, labelB64) {
   return '---\nlm_label: ' + labelB64 + '\n---\n' + s
 }
 
+// ── ZIP 아카이브 코멘트 내장 (Go zipAttacher 미러) ─────────────
+// OOXML·HWPX·ODF·ZIP: EOCD 코멘트에 "LMLABEL1:<base64>" — 리더가 무시.
+const ZIP_PREFIX = 'LMLABEL1:'
+
+function findEOCD(bytes) {
+  const n = bytes.length
+  const min = Math.max(0, n - 22 - 65535)
+  for (let i = n - 22; i >= min; i--) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+      const cl = bytes[i + 20] | (bytes[i + 21] << 8)
+      if (i + 22 + cl === n) return { off: i, commentLen: cl }
+    }
+  }
+  return null
+}
+
+export function splitZipComment(buf) {
+  const bytes = new Uint8Array(buf)
+  const e = findEOCD(bytes)
+  if (!e || e.commentLen === 0) return null
+  const comment = new TextDecoder().decode(bytes.slice(e.off + 22))
+  if (!comment.startsWith(ZIP_PREFIX)) return null
+  let der
+  try {
+    der = Uint8Array.from(atob(comment.slice(ZIP_PREFIX.length)), (c) => c.charCodeAt(0))
+  } catch { return null }
+  const original = bytes.slice(0, e.off + 22)
+  original[e.off + 20] = 0
+  original[e.off + 21] = 0
+  return { original, der }
+}
+
+export function zipAttach(bytes, derBytes) {
+  const e = findEOCD(bytes)
+  if (!e) throw new Error('ZIP 구조를 찾을 수 없습니다 (손상되었거나 ZIP이 아님)')
+  if (e.commentLen > 0) throw new Error('이 파일의 ZIP 코멘트가 이미 사용 중입니다 — 사이드카를 사용하세요')
+  const c = new TextEncoder().encode(ZIP_PREFIX + btoa(String.fromCharCode(...derBytes)))
+  const out = new Uint8Array(e.off + 22 + c.length)
+  out.set(bytes.slice(0, e.off + 22))
+  out[e.off + 20] = c.length & 0xff
+  out[e.off + 21] = (c.length >> 8) & 0xff
+  out.set(c, e.off + 22)
+  return out
+}
+
 // hashBody 는 라벨 제외 본문 바이트의 해시 대상 값(hex)이다
 // (normalize 형식은 정규화 후 해시 — Go HashTarget 미러).
 export async function hashBody(format, bodyBytes) {
@@ -120,7 +165,14 @@ export async function analyzeFile(fileName, buf) {
     return { contentHash, bodyBytes, labelDerBytes, labelSource: labelDerBytes ? '파일 안에 (본문 머리)' : '없음', format }
   }
 
-  // 2) 트레일러 내장 (pdf·이미지 등 + 구버전 호환: 전 포맷 인식)
+  // 2) ZIP 아카이브 코멘트 내장 (OOXML·HWPX·ODF·ZIP)
+  const zc = splitZipComment(buf)
+  if (zc) {
+    const contentHash = await hashBody(format, zc.original)
+    return { contentHash, bodyBytes: zc.original, labelDerBytes: zc.der, labelSource: '파일 안에 (ZIP 코멘트)', format }
+  }
+
+  // 3) 트레일러 내장 (pdf·이미지·HWP 등 + 구버전 호환: 전 포맷 인식)
   const emb = extractEmbedded(buf)
   if (emb) {
     const contentHash = await hashBody(format, emb.original)
@@ -138,6 +190,10 @@ export function buildEmbedded(format, fileName, buf, derBytes) {
     const text = new TextDecoder().decode(new Uint8Array(buf))
     const b64 = btoa(String.fromCharCode(...derBytes))
     return new Blob([mdAttach(text, b64)], { type: 'text/markdown' })
+  }
+  if (format.method === 'container' && format.status === 'supported') {
+    // ZIP 아카이브 코멘트 (실패 시 호출자에서 사이드카 폴백)
+    return new Blob([zipAttach(new Uint8Array(buf), derBytes)], { type: 'application/octet-stream' })
   }
   if (format.method === 'embedded' && format.status === 'supported') {
     return embedLabel(new Uint8Array(buf), derBytes) // 트레일러

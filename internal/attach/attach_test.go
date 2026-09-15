@@ -1,6 +1,7 @@
 package attach
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -69,9 +70,9 @@ func TestA1_UnknownFormatFallsBackToSidecar(t *testing.T) {
 
 // A2: status planned(구현 없음) 포맷 → 사이드카 폴백 + not_implemented.
 func TestA2_PlannedFormatFallsBack(t *testing.T) {
-	a, res := Resolve("보고서.hwp", nil)
-	if res.Format.ID != "hwp" {
-		t.Fatalf("want hwp, got %s", res.Format.ID)
+	a, res := Resolve("보고서.rtf", nil)
+	if res.Format.ID != "rtf" {
+		t.Fatalf("want rtf, got %s", res.Format.ID)
 	}
 	if res.Method != MethodSidecar || res.FallbackReason != "not_implemented" {
 		t.Fatalf("want sidecar/not_implemented, got %+v", res)
@@ -210,5 +211,104 @@ func TestPESidecarOnly(t *testing.T) {
 	var dst bytes.Buffer
 	if err := a.Attach(strings.NewReader("MZ..."), &dst, []byte("DER")); err != ErrSidecarOnly {
 		t.Fatalf("want ErrSidecarOnly, got %v", err)
+	}
+}
+
+// ZIP 계열(OOXML 등) — 아카이브 코멘트 내장 라운드트립.
+// 코멘트 부착 후에도 ZIP으로 정상 열려야 하고(archive/zip), 해시 대상은
+// 부착 전 원본과 일치해야 한다.
+func TestZipAttacherRoundTrip(t *testing.T) {
+	// 실제 ZIP(최소 docx 구조 흉내) 생성
+	var raw bytes.Buffer
+	zw := zip.NewWriter(&raw)
+	for name, body := range map[string]string{
+		"[Content_Types].xml": `<Types/>`,
+		"word/document.xml":   `<w:document>본문</w:document>`,
+	} {
+		f, _ := zw.Create(name)
+		f.Write([]byte(body))
+	}
+	zw.Close()
+	original := raw.Bytes()
+
+	a, res := Resolve("보고서.docx", original[:16])
+	if res.Format.ID != "ooxml" || res.Method != MethodContainer || res.FallbackReason != "" {
+		t.Fatalf("resolve docx: %+v", res)
+	}
+	der := bytes.Repeat([]byte{0x30, 0x82}, 700) // ~1.4KB 라벨
+
+	h1, _ := a.HashTarget(bytes.NewReader(original), int64(len(original)))
+	var labeled bytes.Buffer
+	if err := a.Attach(bytes.NewReader(original), &labeled, der); err != nil {
+		t.Fatal(err)
+	}
+	// 부착 후에도 ZIP으로 정상 파싱된다 (파일 미손상)
+	zr, err := zip.NewReader(bytes.NewReader(labeled.Bytes()), int64(labeled.Len()))
+	if err != nil {
+		t.Fatalf("labeled zip must still open: %v", err)
+	}
+	if len(zr.File) != 2 {
+		t.Fatalf("zip entries changed: %d", len(zr.File))
+	}
+	if !strings.HasPrefix(zr.Comment, "LMLABEL1:") {
+		t.Fatal("comment not set")
+	}
+	// 해시 대상 불변 + 추출 라운드트립
+	h2, _ := a.HashTarget(bytes.NewReader(labeled.Bytes()), int64(labeled.Len()))
+	if !bytes.Equal(h1, h2) {
+		t.Fatal("hash target must exclude zip comment label")
+	}
+	got, err := a.Extract(bytes.NewReader(labeled.Bytes()), int64(labeled.Len()))
+	if err != nil || !bytes.Equal(got, der) {
+		t.Fatalf("extract: %v", err)
+	}
+	// 재부착 방지
+	var dst bytes.Buffer
+	if err := a.Attach(bytes.NewReader(labeled.Bytes()), &dst, der); err == nil {
+		t.Fatal("re-attach must fail")
+	}
+}
+
+// 기존 아카이브 코멘트가 있는 ZIP → 내장 실패 → 사이드카 폴백 (A3 실사례).
+func TestZipExistingCommentFallsBack(t *testing.T) {
+	var raw bytes.Buffer
+	zw := zip.NewWriter(&raw)
+	zw.SetComment("기존 코멘트")
+	f, _ := zw.Create("a.txt")
+	f.Write([]byte("x"))
+	zw.Close()
+
+	a, res := Resolve("자료.zip", nil)
+	var dst bytes.Buffer
+	if err := a.Attach(bytes.NewReader(raw.Bytes()), &dst, []byte{0x30}); err == nil {
+		t.Fatal("attach over existing comment must fail")
+	}
+	_, fbRes := FallbackToSidecar(res)
+	if fbRes.FallbackReason != "attach_failed" {
+		t.Fatalf("fallback: %+v", fbRes)
+	}
+}
+
+// HWP·MSG(CFB): 트레일러 내장으로 지원 (스트림 내장은 Phase 2 실측 후).
+func TestHWPTrailerEmbed(t *testing.T) {
+	head, _ := hex.DecodeString("D0CF11E0A1B11AE1")
+	fake := append(head, bytes.Repeat([]byte{0}, 512)...)
+	a, res := Resolve("공문.hwp", head)
+	if res.Format.ID != "hwp" || res.Method != MethodEmbedded || res.FallbackReason != "" {
+		t.Fatalf("hwp must be embedded-supported now: %+v", res)
+	}
+	der := []byte{0x30, 0x03, 0x02, 0x01, 0x01}
+	var labeled bytes.Buffer
+	if err := a.Attach(bytes.NewReader(fake), &labeled, der); err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.Extract(bytes.NewReader(labeled.Bytes()), int64(labeled.Len()))
+	if err != nil || !bytes.Equal(got, der) {
+		t.Fatalf("extract: %v", err)
+	}
+	h, _ := a.HashTarget(bytes.NewReader(labeled.Bytes()), int64(labeled.Len()))
+	want := sha256.Sum256(fake)
+	if !bytes.Equal(h, want[:]) {
+		t.Fatal("hwp hash target must be original bytes")
 	}
 }

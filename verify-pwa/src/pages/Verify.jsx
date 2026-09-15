@@ -71,6 +71,9 @@ export default function VerifyPage() {
               <Link to={`/lineage/${result.attribution.docGuid}`}>이 문서의 가계도(계보) 보기 →</Link>
             </p>
           )}
+          {result.checks?.signature === 'absent' && result.checks?.ledger === 'registered' && (
+            <RestoreLabel meta={result.meta} />
+          )}
           <StructureView structure={result.meta?.structure} />
           {pair.doc && result.meta?.structure?.derBytes && (
             <AttackDemo doc={pair.doc} sig={pair.sig} />
@@ -233,6 +236,45 @@ function QRScanner({ onResult, onError }) {
     <div className="card" style={{ textAlign: 'center' }}>
       <video ref={videoRef} style={{ maxWidth: '100%', borderRadius: 8 }} muted playsInline />
       <p className="hint">QR 코드를 카메라에 비추세요</p>
+    </div>
+  )
+}
+
+// 라벨 복원 — 이름표가 유실됐지만 원장에 기록이 있는 파일의 라벨 원본을
+// 회수해 .lmsig로 내려준다 ("식별된 파일에 기존 보안정책 재적용").
+function RestoreLabel({ meta }) {
+  const [url, setUrl] = React.useState(null)
+  const [error, setError] = React.useState('')
+
+  async function restore() {
+    setError('')
+    try {
+      const info = await api.labelByHash(meta.contentHash)
+      if (info.destroyed) {
+        throw new Error('파기된 문서입니다 — 라벨을 복원하지 않습니다. 사본이라면 회수 대상입니다.')
+      }
+      const der = Uint8Array.from(atob(info.labelDer), (c) => c.charCodeAt(0))
+      setUrl(URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' })))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>이름표 복원</h2>
+      <p className="hint">
+        이 파일은 이름표 없이 유통되고 있지만, 대장에 발급 기록과 라벨 원본이
+        보관되어 있습니다. 회수해서 다시 붙일 수 있습니다.
+      </p>
+      {!url ? (
+        <button className="primary" onClick={restore}>대장에서 이름표 회수</button>
+      ) : (
+        <a className="download" href={url} download={(meta.fileName || 'document') + '.lmsig'}>
+          ⬇ 이름표 받기 — {meta.fileName}.lmsig (파일과 함께 두세요)
+        </a>
+      )}
+      {error && <p className="error">{error}</p>}
     </div>
   )
 }

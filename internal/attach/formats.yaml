@@ -91,12 +91,12 @@ formats:
     mime: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
     magic: "504B0304"
     method: container
-    location: "OPC customXml 파트 (LMLabel.xml)"
+    location: "ZIP 아카이브 코멘트 (LMLABEL1: base64)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: "MS Office 재저장 시 미지 customXml 파트 보존 여부 버전별 실측 필요 ✎"
+    notes: "앱에서 재저장 시 ZIP 재조립으로 코멘트 소실 가능 — 재저장 보존 실측 필요 ✎"
     warning: null
 
   - id: hwpx
@@ -105,12 +105,12 @@ formats:
     mime: ["application/hwp+zip"]
     magic: "504B0304"
     method: container
-    location: "ZIP 내 별도 엔트리 (META-INF/lmlabel.der)"
+    location: "ZIP 아카이브 코멘트 (LMLABEL1: base64)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: null
+    notes: "앱에서 재저장 시 ZIP 재조립으로 코멘트 소실 가능 — 재저장 보존 실측 필요 ✎"
     warning: null
 
   - id: hwp
@@ -118,13 +118,13 @@ formats:
     extensions: [".hwp"]
     mime: ["application/x-hwp", "application/haansofthwp"]
     magic: "D0CF11E0A1B11AE1"   # CFB 시그니처
-    method: container
-    location: "CFB 스토리지 내 LMLabel 스트림"
+    method: embedded
+    location: "파일 끝 LMLABEL1 트레일러 (CFB LMLabel 스트림 내장은 Phase 2 실측 후)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: "한글 프로그램 재저장 시 스트림 보존 여부 실측 필요 ✎"
+    notes: "CFB 파서는 섹터 기반이라 꼬리 데이터 무시(가정) — 한글 뷰어·재저장 보존 실측 필요 ✎"
     warning: null
 
   - id: odf
@@ -133,12 +133,12 @@ formats:
     mime: ["application/vnd.oasis.opendocument.text"]
     magic: "504B0304"
     method: container
-    location: "ZIP 내 별도 엔트리 (META-INF/lmlabel.der)"
+    location: "ZIP 아카이브 코멘트 (LMLABEL1: base64)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: null
+    notes: "앱에서 재저장 시 ZIP 재조립으로 코멘트 소실 가능 — 재저장 보존 실측 필요 ✎"
     warning: null
 
   - id: zip
@@ -147,12 +147,26 @@ formats:
     mime: ["application/zip"]
     magic: "504B0304"
     method: container
-    location: "ZIP 코멘트 또는 별도 엔트리"
+    location: "ZIP 아카이브 코멘트 (LMLABEL1: base64)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: null
+    notes: "앱에서 재저장 시 ZIP 재조립으로 코멘트 소실 가능 — 재저장 보존 실측 필요 ✎"
+    warning: null
+
+  - id: rtf
+    name: 서식 있는 텍스트 (RTF)
+    extensions: [".rtf"]
+    mime: ["application/rtf"]
+    magic: "7B5C727466"          # {\rtf
+    method: embedded
+    location: "RTF \\*\\lmlabel 무시 가능 제어 그룹"
+    survivability: A
+    status: planned
+    phase: "2"
+    normalize: false
+    notes: "워드패드·Word의 미지 제어 그룹 보존 실측 필요"
     warning: null
 
   # ── 실행 파일 — 사이드카 고정 (§6-6) ──────────────────────
@@ -205,13 +219,13 @@ formats:
     extensions: [".msg"]
     mime: ["application/vnd.ms-outlook"]
     magic: "D0CF11E0A1B11AE1"
-    method: container
-    location: "CFB 스토리지 내 LMLabel 스트림"
+    method: embedded
+    location: "파일 끝 LMLABEL1 트레일러 (CFB LMLabel 스트림 내장은 Phase 2 실측 후)"
     survivability: A
-    status: planned
+    status: supported
     phase: "1-b"
     normalize: false
-    notes: null
+    notes: "CFB 파서는 섹터 기반이라 꼬리 데이터 무시(가정) — 한글 뷰어·재저장 보존 실측 필요 ✎"
     warning: null
 
   # ── 기타 압축 ─────────────────────────────────────────────

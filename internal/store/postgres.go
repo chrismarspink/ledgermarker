@@ -200,6 +200,37 @@ func (p *Postgres) AddTrustAnchor(ctx context.Context, ta *TrustAnchor) error {
 	return nil
 }
 
+func (p *Postgres) InsertFingerprint(ctx context.Context, docGUID uuid.UUID, minhash []byte, buckets []string) error {
+	for _, b := range buckets {
+		if _, err := p.pool.Exec(ctx, `
+			INSERT INTO fingerprint (doc_guid, minhash, lsh_bucket) VALUES ($1, $2, $3)`,
+			docGUID, minhash, b); err != nil {
+			return fmt.Errorf("store: insert fingerprint: %w", err)
+		}
+	}
+	return nil
+}
+
+func (p *Postgres) FingerprintCandidates(ctx context.Context, buckets []string) (map[uuid.UUID][]byte, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT DISTINCT ON (doc_guid) doc_guid, minhash
+		FROM fingerprint WHERE lsh_bucket = ANY($1)`, buckets)
+	if err != nil {
+		return nil, fmt.Errorf("store: fingerprint candidates: %w", err)
+	}
+	defer rows.Close()
+	out := map[uuid.UUID][]byte{}
+	for rows.Next() {
+		var doc uuid.UUID
+		var mh []byte
+		if err := rows.Scan(&doc, &mh); err != nil {
+			return nil, fmt.Errorf("store: scan fingerprint: %w", err)
+		}
+		out[doc] = mh
+	}
+	return out, rows.Err()
+}
+
 func (p *Postgres) EventCounts(ctx context.Context) (map[string]int64, error) {
 	rows, err := p.pool.Query(ctx,
 		`SELECT event_type::text, count(*) FROM ledger_event GROUP BY 1`)

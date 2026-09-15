@@ -87,19 +87,25 @@ type AttachDecl struct {
 }
 
 type IssueRequest struct {
-	DocGUID             string       `json:"docGuid,omitempty"`
-	ContentHash         string       `json:"contentHash"`
-	Grade               string       `json:"grade"`
-	BasisClause         int          `json:"basisClause,omitempty"`
-	BasisKeywords       []string     `json:"basisKeywords,omitempty"`
-	BRMPath             string       `json:"brmPath,omitempty"`
-	ApprovalState       string       `json:"approvalState,omitempty"`
-	ApproverRank        string       `json:"approverRank,omitempty"`
-	DisclosureCondition *time.Time   `json:"disclosureCondition,omitempty"`
-	Lineage             *LineageDecl `json:"lineage,omitempty"`
-	NotAfterDays        int          `json:"notAfterDays,omitempty"`
-	ExportApprover      string       `json:"exportApprover,omitempty"`
-	Attach              *AttachDecl  `json:"attach,omitempty"`
+	DocGUID             string           `json:"docGuid,omitempty"`
+	ContentHash         string           `json:"contentHash"`
+	Grade               string           `json:"grade"`
+	BasisClause         int              `json:"basisClause,omitempty"`
+	BasisKeywords       []string         `json:"basisKeywords,omitempty"`
+	BRMPath             string           `json:"brmPath,omitempty"`
+	ApprovalState       string           `json:"approvalState,omitempty"`
+	ApproverRank        string           `json:"approverRank,omitempty"`
+	DisclosureCondition *time.Time       `json:"disclosureCondition,omitempty"`
+	Lineage             *LineageDecl     `json:"lineage,omitempty"`
+	NotAfterDays        int              `json:"notAfterDays,omitempty"`
+	ExportApprover      string           `json:"exportApprover,omitempty"`
+	Attach              *AttachDecl      `json:"attach,omitempty"`
+	Fingerprint         *FingerprintDecl `json:"fingerprint,omitempty"`
+}
+
+// FingerprintDecl 은 내용 유사도 지문 제출이다 (MinHash, base64).
+type FingerprintDecl struct {
+	MinHash string `json:"minhash"`
 }
 
 // AttachResult 는 발급 응답의 부착 결과다.
@@ -149,6 +155,52 @@ func (c *Client) Regrade(ctx context.Context, docGUID, grade, approvalToken, rea
 func (c *Client) Destroy(ctx context.Context, docGUID, reason, approvalToken string) error {
 	return c.do(ctx, http.MethodPost, "/v1/labels/"+docGUID+"/destroy", "",
 		map[string]string{"reason": reason, "approvalToken": approvalToken}, nil)
+}
+
+// IdentifyCandidate 는 지문 유사도 재식별 후보다.
+type IdentifyCandidate struct {
+	DocGUID       string  `json:"docGuid"`
+	Similarity    float64 `json:"similarity"`
+	Grade         string  `json:"grade,omitempty"`
+	ApprovalState string  `json:"approvalState,omitempty"`
+	IssuerOrg     string  `json:"issuerOrg,omitempty"`
+	ContentHash   string  `json:"contentHash,omitempty"`
+	Revoked       bool    `json:"revoked"`
+}
+
+// Identify 는 MinHash 지문으로 유사 문서 후보를 조회한다 (관찰적 재식별).
+// similarity는 추정치다 — 귀속 확정은 호출자 판단.
+func (c *Client) Identify(ctx context.Context, minhashB64 string, limit int) ([]IdentifyCandidate, error) {
+	var out struct {
+		Candidates []IdentifyCandidate `json:"candidates"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/identify", "",
+		map[string]interface{}{"minhash": minhashB64, "limit": limit}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out.Candidates, nil
+}
+
+// LabelInfo 는 해시로 회수한 라벨 원본이다 (라벨 복원용).
+type LabelInfo struct {
+	DocGUID       string `json:"docGuid"`
+	Grade         string `json:"grade"`
+	ApprovalState string `json:"approvalState"`
+	IssuerOrg     string `json:"issuerOrg"`
+	LedgerSeq     int64  `json:"ledgerSeq"`
+	LabelDER      string `json:"labelDer"` // base64
+	Revoked       bool   `json:"revoked"`
+	Destroyed     bool   `json:"destroyed"`
+}
+
+// LabelByHash 는 원장에서 해시로 라벨 원본을 회수한다 (복원·재적용).
+func (c *Client) LabelByHash(ctx context.Context, hashHex string) (*LabelInfo, error) {
+	var out LabelInfo
+	if err := c.do(ctx, http.MethodGet, "/v1/labels/by-hash/"+hashHex, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ── 계보·원장·신뢰목록 ──────────────────────────────────

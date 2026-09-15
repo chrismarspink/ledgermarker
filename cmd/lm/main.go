@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/innotium/ledgermarker/internal/attach"
+	"github.com/innotium/ledgermarker/internal/fingerprint"
 
 	gatesdk "github.com/innotium/ledgermarker/sdk/go"
 
@@ -55,6 +56,16 @@ func hashTargetHex(a attach.Attacher, data []byte) (string, error) {
 	return hex.EncodeToString(h), nil
 }
 
+// fingerprintB64 는 텍스트 추출 가능한 형식의 지문(base64 MinHash)을
+// 계산한다. 미지원 형식이면 "".
+func fingerprintB64(path string, data []byte) string {
+	text, ok := fingerprint.ExtractText(path, data)
+	if !ok {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(text)))
+}
+
 var (
 	flagServer string
 	flagAPIKey string
@@ -76,8 +87,8 @@ func main() {
 	root.PersistentFlags().StringVar(&flagAPIKey, "api-key",
 		os.Getenv("LM_API_KEY"), "X-LM-Key API 키")
 
-	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdLineage(), cmdRevoke(),
-		cmdRegrade(), cmdDestroy(), cmdLedger(), cmdTrust(), cmdPKI())
+	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdIdentify(), cmdRestore(),
+		cmdLineage(), cmdRevoke(), cmdRegrade(), cmdDestroy(), cmdLedger(), cmdTrust(), cmdPKI())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
@@ -118,6 +129,10 @@ func cmdIssue() *cobra.Command {
 				return fmt.Errorf("해시 대상 계산: %w", err)
 			}
 			req.ContentHash = hash
+			// 지문 제출 — 수정본·변환본 재식별(identify)의 색인이 된다
+			if fp := fingerprintB64(path, data); fp != "" {
+				req.Fingerprint = &gatesdk.FingerprintDecl{MinHash: fp}
+			}
 			if approval != "" {
 				req.ApprovalState = strings.ToUpper(approval)
 			}
@@ -240,6 +255,121 @@ func cmdIssue() *cobra.Command {
 	return c
 }
 
+// ── lm identify 수정본.docx ─────────────────────────────────
+// 관찰적 재식별: 해시로 못 찾는 파일(일부 수정본·형식 변환본)을 내용
+// 유사도 지문으로 원장의 원본과 연관 짓는다. 결과는 추정 후보다 —
+// 귀속 확정은 --parent 계보 선언 등 운영자 판단.
+
+func cmdIdentify() *cobra.Command {
+	var limit int
+	c := &cobra.Command{
+		Use:   "identify <파일>",
+		Short: "유사 문서 재식별 — 수정·변환된 파일의 원본 후보를 지문으로 탐색",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			path := args[0]
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("파일 읽기: %w", err)
+			}
+			text, ok := fingerprint.ExtractText(path, data)
+			if !ok {
+				return fmt.Errorf("이 형식은 텍스트 추출을 지원하지 않습니다 (지원: txt·md·csv·log·docx·pptx·xlsx·hwpx·odt·pdf)")
+			}
+			mh := base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(text)))
+			cands, err := client().Identify(context.Background(), mh, limit)
+			if err != nil {
+				return err
+			}
+			if len(cands) == 0 {
+				fmt.Println("유사한 등록 문서를 찾지 못했습니다 (유사도 0.3 미만)")
+				return nil
+			}
+			fmt.Printf("%s 의 원본 후보 %d건 (내용 유사도 순):\n", path, len(cands))
+			for i, cd := range cands {
+				mark := ""
+				if cd.Revoked {
+					mark = " [폐기/파기됨]"
+				}
+				fmt.Printf("  %d. 유사도 %.0f%%  docGuid=%s  등급=%s %s%s\n",
+					i+1, cd.Similarity*100, cd.DocGUID, cd.Grade, cd.IssuerOrg, mark)
+			}
+			top := cands[0]
+			if top.Similarity >= 0.5 && top.ContentHash != "" {
+				fmt.Printf("\n계보로 확정하려면 (파생본 발급):\n  lm issue %s --grade %s --parent %s --transform edit\n",
+					path, top.Grade, top.ContentHash)
+			}
+			return nil
+		},
+	}
+	c.Flags().IntVar(&limit, "limit", 5, "후보 수")
+	return c
+}
+
+// ── lm restore 문서.docx ────────────────────────────────────
+// 라벨 복원(재적용): 이름표가 유실된 파일의 해시로 원장에서 라벨 원본을
+// 회수해 다시 붙인다 — "식별된 파일에 기존 보안정책 재적용" 시나리오.
+
+func cmdRestore() *cobra.Command {
+	var embed bool
+	c := &cobra.Command{
+		Use:   "restore <파일>",
+		Short: "라벨 복원 — 원장에서 라벨 원본을 회수해 재부착 (기본: .lmsig 사이드카)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			path := args[0]
+			data, attacher, res, err := resolveFile(path)
+			if err != nil {
+				return err
+			}
+			if _, err := attacher.Extract(bytes.NewReader(data), int64(len(data))); err == nil {
+				return fmt.Errorf("%s 에는 이미 라벨이 부착되어 있습니다 (lm verify로 확인)", path)
+			}
+			hash, err := hashTargetHex(attacher, data)
+			if err != nil {
+				return fmt.Errorf("해시 대상 계산: %w", err)
+			}
+			info, err := client().LabelByHash(context.Background(), hash)
+			if err != nil {
+				return fmt.Errorf("원장 조회 실패 — 정확 일치 기록이 없으면 lm identify 로 유사 문서를 찾아보세요: %w", err)
+			}
+			if info.Destroyed {
+				return fmt.Errorf("이 문서는 파기되었습니다(docGuid=%s) — 라벨을 복원하지 않습니다. 사본이라면 회수 대상입니다", info.DocGUID)
+			}
+			if info.Revoked {
+				fmt.Printf("주의: 폐기된 라벨입니다 — 복원해도 검증은 revoked/deny로 판정됩니다\n")
+			}
+			der, err := base64.StdEncoding.DecodeString(info.LabelDER)
+			if err != nil {
+				return fmt.Errorf("labelDer 디코드: %w", err)
+			}
+			if embed && (res.Method == attach.MethodEmbedded || res.Method == attach.MethodContainer) {
+				var out bytes.Buffer
+				if err := attacher.Attach(bytes.NewReader(data), &out, der); err != nil {
+					fmt.Printf("내장 실패(%v) — 사이드카로 복원합니다\n", err)
+				} else {
+					if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+						return fmt.Errorf("파일 쓰기: %w", err)
+					}
+					fmt.Printf("라벨 복원 완료 (파일에 내장): %s\n", path)
+					fmt.Printf("  docGuid=%s 등급=%s %s (원장 seq %d)\n",
+						info.DocGUID, info.Grade, info.IssuerOrg, info.LedgerSeq)
+					return nil
+				}
+			}
+			if err := writeSidecar(path, info.LabelDER); err != nil {
+				return fmt.Errorf("사이드카 쓰기: %w", err)
+			}
+			fmt.Printf("라벨 복원 완료: %s%s\n", path, sidecarExt)
+			fmt.Printf("  docGuid=%s 등급=%s %s (원장 seq %d)\n",
+				info.DocGUID, info.Grade, info.IssuerOrg, info.LedgerSeq)
+			return nil
+		},
+	}
+	c.Flags().BoolVar(&embed, "embed", false, "사이드카 대신 파일 안에 재내장 (형식이 지원할 때)")
+	return c
+}
+
 // ── lm scan ./문서고 --issue --recursive --grade O ─────────
 
 func cmdScan() *cobra.Command {
@@ -279,6 +409,9 @@ func cmdScan() *cobra.Command {
 					ContentHash: hash, Grade: grade, NotAfterDays: notAfterDays,
 					// scan은 사이드카 일괄 부착 — 폴백 아님
 					Attach: &gatesdk.AttachDecl{Method: string(attach.MethodSidecar), FormatID: res.Format.ID},
+				}
+				if fp := fingerprintB64(path, data); fp != "" {
+					req.Fingerprint = &gatesdk.FingerprintDecl{MinHash: fp}
 				}
 				// 해시를 멱등키로 써서 재실행해도 원장 행이 중복되지 않게 한다
 				resp, err := client().IssueLabel(context.Background(), req, "scan:"+hash)

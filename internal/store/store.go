@@ -37,6 +37,13 @@ type Store interface {
 	TrustAnchors(ctx context.Context) ([]TrustAnchor, error)
 	AddTrustAnchor(ctx context.Context, ta *TrustAnchor) error
 
+	// ── 지문 (관찰적 재식별 — 0001 마이그레이션의 fingerprint 테이블) ──
+	// InsertFingerprint 는 문서 지문을 LSH 버킷별 행으로 저장한다.
+	InsertFingerprint(ctx context.Context, docGUID uuid.UUID, minhash []byte, buckets []string) error
+	// FingerprintCandidates 는 버킷을 하나라도 공유하는 문서들의
+	// (docGUID → minhash)를 반환한다.
+	FingerprintCandidates(ctx context.Context, buckets []string) (map[uuid.UUID][]byte, error)
+
 	// ── 통계 (admin 대시보드) ──
 	EventCounts(ctx context.Context) (map[string]int64, error)
 

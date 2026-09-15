@@ -78,11 +78,13 @@ func (s *Server) Handler() http.Handler {
 	// 공개 (PWA·게이트 공용 — 읽기와 검증)
 	mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	mux.HandleFunc("POST /v1/verify", s.handleVerify)
+	mux.HandleFunc("POST /v1/identify", s.handleIdentify) // 지문 유사도 재식별
 	mux.HandleFunc("GET /v1/documents/{docGuid}/lineage", s.handleLineage)
 	mux.HandleFunc("GET /v1/checkpoints/latest", s.handleLatestCheckpoint)
 	mux.HandleFunc("GET /v1/trust/list", s.handleTrustList)
 	mux.HandleFunc("GET /v1/keys", s.handleKeys)         // 공개키·인증서만 노출
 	mux.HandleFunc("GET /v1/formats", s.handleFormats)   // 포맷 카탈로그 (공개, 캐시 대상)
+	mux.HandleFunc("GET /v1/labels/by-hash/{hash}", s.handleLabelByHash) // 라벨 복원용
 	mux.HandleFunc("POST /v1/formats/resolve", s.handleFormatsResolve)
 	mux.HandleFunc("GET /v1/treaties", s.handleTreaties) // 등가성 협정 (여권 정책)
 

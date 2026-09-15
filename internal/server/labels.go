@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/innotium/ledgermarker/internal/attach"
+	"github.com/innotium/ledgermarker/internal/fingerprint"
 	"github.com/innotium/ledgermarker/internal/issue"
 	"github.com/innotium/ledgermarker/internal/ledger"
 )
@@ -35,6 +36,15 @@ type IssueRequest struct {
 	// 부착·해시는 클라이언트에서 일어나므로(파일 미전송 원칙) 서버는
 	// 보고를 원장에 기록하고 카탈로그 정보를 덧붙여 회신한다.
 	Attach *AttachDecl `json:"attach,omitempty"`
+	// Fingerprint 는 내용 유사도 지문(MinHash 시그니처, base64)이다 —
+	// 클라이언트가 텍스트에서 계산해 보낸다. 본문 복원 불가한 단방향
+	// 요약이므로 불변식 3(본문 미저장)과 정합.
+	Fingerprint *FingerprintDecl `json:"fingerprint,omitempty"`
+}
+
+// FingerprintDecl 은 지문 제출이다.
+type FingerprintDecl struct {
+	MinHash string `json:"minhash"` // base64(uint64×128 BE)
 }
 
 // AttachDecl 은 부착 결과 선언이다.
@@ -231,6 +241,18 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 	if err := s.writer.Append(ctx, ev); err != nil {
 		return nil, http.StatusServiceUnavailable, fmt.Errorf("ledger append: %w", err)
 	}
+	// 지문 저장 (관찰적 재식별용) — 실패해도 발급은 유효 (부가 색인)
+	if req.Fingerprint != nil && req.Fingerprint.MinHash != "" {
+		if mh, err := base64.StdEncoding.DecodeString(req.Fingerprint.MinHash); err == nil {
+			if sig, err := fingerprint.Decode(mh); err == nil {
+				if err := s.cfg.Store.InsertFingerprint(ctx, docGUID, mh, fingerprint.Buckets(sig)); err != nil {
+					s.log.Warn("insert fingerprint failed", "docGuid", docGUID, "err", err)
+				}
+			} else {
+				s.log.Warn("invalid fingerprint submitted", "docGuid", docGUID, "err", err)
+			}
+		}
+	}
 	s.refreshView(ctx)
 	// 로그에는 해시·GUID만 남긴다 — 본문·지문 원본 금지 (DEV SPEC §12)
 	s.log.Info("label issued", "docGuid", docGUID, "seq", ev.Seq, "grade", req.Grade)
@@ -244,6 +266,49 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		NotAfter:  lbl.NotAfter,
 		Attach:    attachOut,
 	}, 0, nil
+}
+
+// handleLabelByHash 는 해시로 라벨 원본을 회수한다 (GET /v1/labels/by-hash/{hash}).
+// 라벨 복원(재적용)의 구현체: 라벨이 유실된 파일도 원장에 보관된 label_der로
+// 이름표를 되살릴 수 있다 — "식별된 파일에 기존 보안정책 재적용" 시나리오.
+// 라벨은 비밀이 아니므로(등급 평문 설계) 공개 조회다.
+func (s *Server) handleLabelByHash(w http.ResponseWriter, r *http.Request) {
+	hash, err := hex.DecodeString(r.PathValue("hash"))
+	if err != nil || len(hash) != 32 {
+		writeErr(w, http.StatusBadRequest, "hash must be 64 hex chars (SHA-256)")
+		return
+	}
+	events, err := s.cfg.Store.EventsByContentHash(r.Context(), hash)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	var matched *ledger.Event
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type.IsIssuance() && len(events[i].LabelDER) > 0 {
+			matched = &events[i]
+			break
+		}
+	}
+	if matched == nil {
+		writeErr(w, http.StatusNotFound, "no label found in ledger for this hash")
+		return
+	}
+	revoked, destroyed := false, false
+	if latest, err := s.cfg.Store.LatestByDoc(r.Context(), matched.DocGUID); err == nil && latest != nil {
+		revoked = latest.Type == ledger.EventRevoke || latest.Type == ledger.EventDestroy
+		destroyed = latest.Type == ledger.EventDestroy
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"docGuid":       matched.DocGUID.String(),
+		"grade":         matched.Grade,
+		"approvalState": matched.ApprovalState,
+		"issuerOrg":     matched.IssuerOrg,
+		"ledgerSeq":     matched.Seq,
+		"labelDer":      base64.StdEncoding.EncodeToString(matched.LabelDER),
+		"revoked":       revoked,
+		"destroyed":     destroyed,
+	})
 }
 
 // handleRevoke 는 라벨 폐기를 원장 REVOKE 이벤트로 기록한다(삭제 아님).
