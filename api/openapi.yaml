@@ -47,6 +47,14 @@ components:
             method: { type: string, enum: [embedded, container, sidecar, ledger_only] }
             formatId: { type: string, description: formats.yaml id (unknown 포함) }
             fallbackReason: { type: string, enum: [not_implemented, attach_failed] }
+        fingerprint:
+          type: object
+          description: 내용 유사도 지문 — 수정본·변환본 재식별 색인
+          properties:
+            minhash: { type: string, description: base64(uint64×128 BE) }
+        textHash: { type: string, description: 정규화 본문 텍스트 해시(hex) — 재저장 생존 2차 색인 }
+        docsimFp: { type: string, description: 사내 docsim 정밀 지문(JSON, 원문 복원 불가) — identify --deep 용 }
+        approvalToken: { type: string, description: 파생물을 부모보다 낮은 등급으로 발급 시 필수(상속 규칙) }
     IssueResponse:
       type: object
       properties:
@@ -69,6 +77,7 @@ components:
       properties:
         labelDer: { type: string, description: base64. 없으면 폴백 검증(해시만 조회) }
         contentHash: { type: string, description: hex SHA-256 — 필수 }
+        textHash: { type: string, description: 정규화 본문 텍스트 해시(hex, 공백 제거) — 재저장·재압축본의 2차 재식별 }
         level: { type: integer, enum: [1, 2, 3], default: 2, description: 3(협정)은 Phase 2 }
     VerifyResponse:
       type: object
@@ -208,6 +217,31 @@ paths:
       responses:
         "200":
           description: '{ok, badSeq, checked}'
+  /identify:
+    post:
+      summary: 지문 유사도 재식별 — 수정본·변환본의 원본 후보 (추정, 판정 아님)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minhash]
+              properties:
+                minhash: { type: string, description: base64(uint64×128 BE) }
+                limit: { type: integer, default: 5, maximum: 20 }
+                minSimilarity: { type: number, default: 0.3 }
+      responses:
+        "200": { description: "candidates[] (docGuid·similarity·grade·docsimFp 등, 유사도 내림차순)" }
+  /labels/by-hash/{hash}:
+    get:
+      summary: 라벨 원본 회수 (복원·정책 재적용) — 공개 조회
+      parameters:
+        - { name: hash, in: path, required: true, schema: { type: string }, description: hex SHA-256 }
+        - { name: kind, in: query, schema: { type: string, enum: [content, text] }, description: text = 텍스트 해시(재저장본)로 조회 }
+      responses:
+        "200": { description: "{docGuid, grade, labelDer, revoked, destroyed, ...}" }
+        "404": { description: 원장에 라벨 없음 }
   /formats:
     get:
       summary: 포맷 카탈로그 (단일 진실 원천 formats.yaml — 공개, ETag 캐시)

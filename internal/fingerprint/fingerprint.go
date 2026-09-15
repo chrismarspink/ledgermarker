@@ -94,13 +94,18 @@ func FromText(text string) []uint64 {
 // ("본문 텍스트 해시는 서식 변경에도 안정적")를 흡수한 2차 식별자.
 // 편집기 재저장·재압축으로 파일 바이트가 통째로 바뀌어도, 본문 텍스트가
 // 같으면 같은 값이 나와 정확 재식별이 가능하다.
+//
+// 공백은 전부 제거하고 해시한다 — 편집기가 텍스트 run을 분절해
+// 재저장하면 공백 삽입 위치가 달라지기 때문(Pages 실측으로 확인).
+// 지문(NormalizeForFP)은 오탐 억제를 위해 공백 1개를 유지하므로 별도다.
 // 텍스트 추출 불가 형식이면 (nil, false).
 func TextHash(filename string, data []byte) ([]byte, bool) {
 	text, ok := ExtractText(filename, data)
 	if !ok {
 		return nil, false
 	}
-	sum := sha256.Sum256([]byte(NormalizeForFP(text)))
+	stripped := strings.Join(strings.Fields(NormalizeForFP(text)), "")
+	sum := sha256.Sum256([]byte(stripped))
 	return sum[:], true
 }
 

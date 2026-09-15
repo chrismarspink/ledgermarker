@@ -95,6 +95,7 @@ async function runVerify(doc, sig) {
   let isEmbedded = false
   let originalSize = doc?.size ?? 0
   let formatId = ''
+  let textHash = ''
 
   if (sig) {
     const der = await sig.arrayBuffer()
@@ -110,6 +111,7 @@ async function runVerify(doc, sig) {
     const analysis = await analyzeFile(doc.name, buf)
     contentHash = analysis.contentHash
     formatId = analysis.format.id
+    textHash = analysis.textHash || ''
     const emb = extractEmbedded(buf)
     if (emb) {
       isEmbedded = true
@@ -146,6 +148,7 @@ async function runVerify(doc, sig) {
     const res = await api.verify({
       labelDer: labelDerB64 || undefined,
       contentHash,
+      textHash: textHash || undefined, // 재저장본 2차 재식별
       level: 2
     })
     return { ...res, meta, offline: false }

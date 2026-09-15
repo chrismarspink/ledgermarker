@@ -142,6 +142,19 @@ export async function hashBody(format, bodyBytes) {
   return sha256HexBytes(bodyBytes)
 }
 
+// textHashOf 는 텍스트 해시 2차 식별자(hex)다 — Go fingerprint.TextHash 미러:
+// NFC → 소문자 → 공백 전부 제거 → SHA-256. 편집기 재저장으로 바이트·공백
+// 분절이 바뀌어도 유지된다. (웹은 텍스트 계열 형식만 — ZIP XML 추출은 CLI)
+async function textHashOf(bodyText) {
+  const stripped = bodyText.normalize('NFC').toLowerCase().replace(/\s+/g, '')
+  if (!stripped) return ''
+  return sha256HexBytes(new TextEncoder().encode(stripped))
+}
+
+function isTextFormat(format) {
+  return format.id === 'markdown' || format.id === 'plaintext'
+}
+
 // ── 통합 처리: 파일 → {contentHash, bodyBytes, labelDerBytes|null, labelSource, format}
 export async function analyzeFile(fileName, buf) {
   const bytes = new Uint8Array(buf)
@@ -159,10 +172,11 @@ export async function analyzeFile(fileName, buf) {
     const { body, labelB64 } = stripLM(text)
     const bodyBytes = new TextEncoder().encode(body)
     const contentHash = await hashBody(format, bodyBytes)
+    const textHash = await textHashOf(body)
     const labelDerBytes = labelB64
       ? Uint8Array.from(atob(labelB64), (c) => c.charCodeAt(0))
       : null
-    return { contentHash, bodyBytes, labelDerBytes, labelSource: labelDerBytes ? '파일 안에 (본문 머리)' : '없음', format }
+    return { contentHash, textHash, bodyBytes, labelDerBytes, labelSource: labelDerBytes ? '파일 안에 (본문 머리)' : '없음', format }
   }
 
   // 2) ZIP 아카이브 코멘트 내장 (OOXML·HWPX·ODF·ZIP)
@@ -176,12 +190,14 @@ export async function analyzeFile(fileName, buf) {
   const emb = extractEmbedded(buf)
   if (emb) {
     const contentHash = await hashBody(format, emb.original)
-    return { contentHash, bodyBytes: emb.original, labelDerBytes: emb.der, labelSource: '파일 안에 (꼬리표)', format }
+    const textHash = isTextFormat(format) ? await textHashOf(new TextDecoder().decode(emb.original)) : ''
+    return { contentHash, textHash, bodyBytes: emb.original, labelDerBytes: emb.der, labelSource: '파일 안에 (꼬리표)', format }
   }
 
   // 3) 라벨 없음 — 원본 그대로 해시
   const contentHash = await hashBody(format, bytes)
-  return { contentHash, bodyBytes: bytes, labelDerBytes: null, labelSource: '없음', format }
+  const textHash = isTextFormat(format) ? await textHashOf(new TextDecoder().decode(bytes)) : ''
+  return { contentHash, textHash, bodyBytes: bytes, labelDerBytes: null, labelSource: '없음', format }
 }
 
 // 내장 라벨 파일 생성 (생성 화면용). 지원하지 않으면 null.
