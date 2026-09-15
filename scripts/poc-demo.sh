@@ -46,7 +46,21 @@ step "⑤ DOCX→PDF 변환 파생관계 식별"
 $LM issue "$W/report.docx" --grade O >/dev/null
 $LM identify "$W/report.pdf"
 
-step "⑥ 이동·수정·변환 이력 — Lineage/Audit (append-only 원장)"
+step "⑥ 편집기 재저장 시뮬레이션 → 텍스트 해시로 재식별 (SigNET H-5 흡수)"
+python3 - "$W/문서관리규정.docx" "$W/재저장본.docx" <<'PY'
+import sys, zipfile
+# 편집기 재저장 흉내: ZIP 전체 재조립 — 압축 바이트·엔트리 순서가 바뀌고
+# 아카이브 코멘트(라벨)도 소실된다. 원시 해시는 완전히 달라진다.
+src = zipfile.ZipFile(sys.argv[1])
+with zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_STORED) as out:
+    for n in sorted(src.namelist(), reverse=True):
+        out.writestr(n, src.read(n))
+print("  재저장본 생성 — 바이트 전면 변경 + 라벨 소실 (본문 텍스트만 동일)")
+PY
+$LM verify "$W/재저장본.docx" | grep -E "귀속|서명"
+$LM restore "$W/재저장본.docx"
+
+step "⑦ 이동·수정·변환 이력 — Lineage/Audit (append-only 원장)"
 $LM ledger list --limit 6
 $LM ledger verify
 

@@ -40,6 +40,14 @@ type IssueRequest struct {
 	// 클라이언트가 텍스트에서 계산해 보낸다. 본문 복원 불가한 단방향
 	// 요약이므로 불변식 3(본문 미저장)과 정합.
 	Fingerprint *FingerprintDecl `json:"fingerprint,omitempty"`
+	// TextHash 는 정규화 본문 텍스트 SHA-256(hex, 선택) — 재저장·재압축
+	// 후에도 유지되는 2차 식별 색인 (SigNET H-5 흡수).
+	TextHash string `json:"textHash,omitempty"`
+	// DocsimFp 는 사내 docsim 모듈의 정밀 지문(JSON, 선택) — 원문 복원
+	// 불가. lm identify --deep 의 의미 비교에 쓰인다.
+	DocsimFp string `json:"docsimFp,omitempty"`
+	// ApprovalToken: 파생물 등급이 부모보다 낮을 때(상속 규칙 하향) 필수.
+	ApprovalToken string `json:"approvalToken,omitempty"`
 }
 
 // FingerprintDecl 은 지문 제출이다.
@@ -163,6 +171,17 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 			} else {
 				rootDocID = parents[i].DocGUID
 			}
+			// 라벨 상속 규칙 (SigNET v2-6 흡수): 파생물은 원본 최고 등급을
+			// 상속하며, 자동 하향은 금지다 — 복사·요약·발췌는 같은 정보의
+			// 다른 형태이기 때문. 하향은 등급 하향과 동일한 승인 토큰 필요.
+			if parents[i].Grade != "" && gradeRank(req.Grade) < gradeRank(parents[i].Grade) {
+				if req.ApprovalToken == "" || s.cfg.RegradeApprovalToken == "" ||
+					req.ApprovalToken != s.cfg.RegradeApprovalToken {
+					return nil, http.StatusForbidden, fmt.Errorf(
+						"파생물은 원본 등급(%s) 이상을 상속합니다 — 하향(%s) 발급은 승인 토큰이 필요합니다",
+						parents[i].Grade, req.Grade)
+				}
+			}
 			break
 		}
 	}
@@ -211,6 +230,12 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		IssuerOrg:     s.cfg.IssuerOrg,
 		SignerCertSN:  s.cfg.LabelSigner.SerialNumber(),
 		Actor:         actor,
+		DocsimFP:      req.DocsimFp,
+	}
+	if req.TextHash != "" {
+		if th, err := hex.DecodeString(req.TextHash); err == nil && len(th) == 32 {
+			ev.TextHash = th
+		}
 	}
 	// 부착 결과 기록 — 폴백 추적 (§2.5). 미보고 시 sidecar/unknown으로 간주.
 	var attachOut *AttachResult
@@ -278,7 +303,13 @@ func (s *Server) handleLabelByHash(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "hash must be 64 hex chars (SHA-256)")
 		return
 	}
-	events, err := s.cfg.Store.EventsByContentHash(r.Context(), hash)
+	// kind=text 면 텍스트 해시(2차 식별자)로 조회 — 재저장본 복원용
+	var events []ledger.Event
+	if r.URL.Query().Get("kind") == "text" {
+		events, err = s.cfg.Store.EventsByTextHash(r.Context(), hash)
+	} else {
+		events, err = s.cfg.Store.EventsByContentHash(r.Context(), hash)
+	}
 	if err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
 		return

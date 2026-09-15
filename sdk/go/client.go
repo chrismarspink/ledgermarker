@@ -35,6 +35,7 @@ func New(baseURL, apiKey string) *Client {
 type VerifyRequest struct {
 	LabelDER    string `json:"labelDer,omitempty"` // base64. 없으면 폴백 검증
 	ContentHash string `json:"contentHash"`        // hex SHA-256 — 필수
+	TextHash    string `json:"textHash,omitempty"` // 정규화 본문 텍스트 해시 (재저장본 재식별)
 	Level       int    `json:"level,omitempty"`    // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
 }
 
@@ -101,6 +102,9 @@ type IssueRequest struct {
 	ExportApprover      string           `json:"exportApprover,omitempty"`
 	Attach              *AttachDecl      `json:"attach,omitempty"`
 	Fingerprint         *FingerprintDecl `json:"fingerprint,omitempty"`
+	TextHash            string           `json:"textHash,omitempty"`      // 2차 식별 색인
+	DocsimFp            string           `json:"docsimFp,omitempty"`      // docsim 정밀 지문 (선택)
+	ApprovalToken       string           `json:"approvalToken,omitempty"` // 파생물 하향 상속 승인
 }
 
 // FingerprintDecl 은 내용 유사도 지문 제출이다 (MinHash, base64).
@@ -166,6 +170,7 @@ type IdentifyCandidate struct {
 	IssuerOrg     string  `json:"issuerOrg,omitempty"`
 	ContentHash   string  `json:"contentHash,omitempty"`
 	Revoked       bool    `json:"revoked"`
+	DocsimFp      string  `json:"docsimFp,omitempty"` // 정밀 비교용 (lm identify --deep)
 }
 
 // Identify 는 MinHash 지문으로 유사 문서 후보를 조회한다 (관찰적 재식별).
@@ -198,6 +203,16 @@ type LabelInfo struct {
 func (c *Client) LabelByHash(ctx context.Context, hashHex string) (*LabelInfo, error) {
 	var out LabelInfo
 	if err := c.do(ctx, http.MethodGet, "/v1/labels/by-hash/"+hashHex, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// LabelByTextHash 는 텍스트 해시(2차 식별자)로 라벨을 회수한다 —
+// 재저장·재압축으로 원시 해시가 달라진 파일의 복원용.
+func (c *Client) LabelByTextHash(ctx context.Context, textHashHex string) (*LabelInfo, error) {
+	var out LabelInfo
+	if err := c.do(ctx, http.MethodGet, "/v1/labels/by-hash/"+textHashHex+"?kind=text", "", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

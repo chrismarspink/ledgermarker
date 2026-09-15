@@ -41,7 +41,7 @@ func (p *Postgres) Pool() *pgxpool.Pool { return p.pool }
 const eventCols = `seq, event_type, doc_guid, content_hash, grade, basis_clause,
 	basis_keywords, brm_path, approval_state, parent_hash, root_doc_id, transform,
 	label_der, issuer_org, signer_cert_sn, revoked_ref, reason, actor,
-	attach_method, format_id, fallback_reason,
+	attach_method, format_id, fallback_reason, text_hash, docsim_fp,
 	prev_hash, row_hash, created_at`
 
 func (p *Postgres) Tip(ctx context.Context) (int64, []byte, error) {
@@ -64,8 +64,8 @@ func (p *Postgres) InsertEvent(ctx context.Context, e *ledger.Event) error {
 			basis_clause, basis_keywords, brm_path, approval_state, parent_hash,
 			root_doc_id, transform, label_der, issuer_org, signer_cert_sn,
 			revoked_ref, reason, actor, attach_method, format_id, fallback_reason,
-			prev_hash, row_hash, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+			text_hash, docsim_fp, prev_hash, row_hash, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
 		e.Seq, string(e.Type), e.DocGUID, e.ContentHash,
 		nullStr(e.Grade), nullI16(e.BasisClause), e.BasisKeywords,
 		nullStr(e.BRMPath), nullStr(e.ApprovalState), nullBytes(e.ParentHash),
@@ -73,6 +73,7 @@ func (p *Postgres) InsertEvent(ctx context.Context, e *ledger.Event) error {
 		e.IssuerOrg, nullStr(e.SignerCertSN), nullI64(e.RevokedRef),
 		nullStr(e.Reason), e.Actor,
 		nullStr(e.AttachMethod), nullStr(e.FormatID), nullStr(e.FallbackReason),
+		nullBytes(e.TextHash), nullStr(e.DocsimFP),
 		e.PrevHash, e.RowHash, e.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("store: insert event: %w", err)
@@ -94,6 +95,15 @@ func (p *Postgres) EventsByContentHash(ctx context.Context, hash []byte) ([]ledg
 		FROM ledger_event WHERE content_hash = $1 ORDER BY seq`, hash)
 	if err != nil {
 		return nil, fmt.Errorf("store: events by hash: %w", err)
+	}
+	return scanEvents(rows)
+}
+
+func (p *Postgres) EventsByTextHash(ctx context.Context, textHash []byte) ([]ledger.Event, error) {
+	rows, err := p.pool.Query(ctx, `SELECT `+eventCols+`
+		FROM ledger_event WHERE text_hash = $1 ORDER BY seq`, textHash)
+	if err != nil {
+		return nil, fmt.Errorf("store: events by text hash: %w", err)
 	}
 	return scanEvents(rows)
 }
@@ -267,23 +277,25 @@ func scanEvents(rows pgx.Rows) ([]ledger.Event, error) {
 		var e ledger.Event
 		var typ string
 		var grade, brm, appr, transform, signerSN, reason *string
-		var attachMethod, formatID, fallbackReason *string
+		var attachMethod, formatID, fallbackReason, docsimFP *string
 		var basis *int16
 		var revokedRef *int64
-		var parentHash, labelDER []byte
+		var parentHash, labelDER, textHash []byte
 		var rootDoc *uuid.UUID
 		var keywords []string
 		var createdAt time.Time
 		if err := rows.Scan(&e.Seq, &typ, &e.DocGUID, &e.ContentHash, &grade,
 			&basis, &keywords, &brm, &appr, &parentHash, &rootDoc, &transform,
 			&labelDER, &e.IssuerOrg, &signerSN, &revokedRef, &reason, &e.Actor,
-			&attachMethod, &formatID, &fallbackReason,
+			&attachMethod, &formatID, &fallbackReason, &textHash, &docsimFP,
 			&e.PrevHash, &e.RowHash, &createdAt); err != nil {
 			return nil, fmt.Errorf("store: scan event: %w", err)
 		}
 		e.AttachMethod = deref(attachMethod)
 		e.FormatID = deref(formatID)
 		e.FallbackReason = deref(fallbackReason)
+		e.TextHash = textHash
+		e.DocsimFP = deref(docsimFP)
 		e.Type = ledger.EventType(typ)
 		e.Grade = deref(grade)
 		e.BRMPath = deref(brm)

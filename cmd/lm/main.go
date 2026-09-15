@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -64,6 +65,42 @@ func fingerprintB64(path string, data []byte) string {
 		return ""
 	}
 	return base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(text)))
+}
+
+// textHashHex 는 정규화 본문 텍스트 해시(hex) — 재저장본 재식별용 2차 색인.
+func textHashHex(path string, data []byte) string {
+	th, ok := fingerprint.TextHash(path, data)
+	if !ok {
+		return ""
+	}
+	return hex.EncodeToString(th)
+}
+
+// docsimFingerprint 는 사내 docsim 모듈로 정밀 지문을 계산한다.
+// LM_DOCSIM 환경변수(docsim 실행 파일 경로)가 설정된 경우에만 동작 —
+// docsim 코드는 수정하지 않고 CLI 어댑터로만 결합한다.
+func docsimFingerprint(path string) string {
+	bin := os.Getenv("LM_DOCSIM")
+	if bin == "" {
+		return ""
+	}
+	tmp, err := os.CreateTemp("", "lm-docsim-*.fp.json")
+	if err != nil {
+		return ""
+	}
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+	cmd := exec.Command(bin, "fingerprint", path, "-o", tmp.Name())
+	cmd.Env = os.Environ()
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "(docsim 지문 생략: %v)\n", err)
+		return ""
+	}
+	b, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 var (
@@ -133,6 +170,10 @@ func cmdIssue() *cobra.Command {
 			if fp := fingerprintB64(path, data); fp != "" {
 				req.Fingerprint = &gatesdk.FingerprintDecl{MinHash: fp}
 			}
+			// 텍스트 해시 — 재저장·재압축 후에도 유지되는 2차 식별 색인
+			req.TextHash = textHashHex(path, data)
+			// docsim 정밀 지문 (LM_DOCSIM 설정 시)
+			req.DocsimFp = docsimFingerprint(path)
 			if approval != "" {
 				req.ApprovalState = strings.ToUpper(approval)
 			}
@@ -262,9 +303,10 @@ func cmdIssue() *cobra.Command {
 
 func cmdIdentify() *cobra.Command {
 	var limit int
+	var deep bool
 	c := &cobra.Command{
 		Use:   "identify <파일>",
-		Short: "유사 문서 재식별 — 수정·변환된 파일의 원본 후보를 지문으로 탐색",
+		Short: "유사 문서 재식별 — 수정·변환된 파일의 원본 후보를 지문으로 탐색 (--deep: docsim 정밀·의미 비교)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			path := args[0]
@@ -285,7 +327,7 @@ func cmdIdentify() *cobra.Command {
 				fmt.Println("유사한 등록 문서를 찾지 못했습니다 (유사도 0.3 미만)")
 				return nil
 			}
-			fmt.Printf("%s 의 원본 후보 %d건 (내용 유사도 순):\n", path, len(cands))
+			fmt.Printf("%s 의 원본 후보 %d건 (LSH 후보 → 내용 유사도 순):\n", path, len(cands))
 			for i, cd := range cands {
 				mark := ""
 				if cd.Revoked {
@@ -293,6 +335,11 @@ func cmdIdentify() *cobra.Command {
 				}
 				fmt.Printf("  %d. 유사도 %.0f%%  docGuid=%s  등급=%s %s%s\n",
 					i+1, cd.Similarity*100, cd.DocGUID, cd.Grade, cd.IssuerOrg, mark)
+			}
+			if deep {
+				if err := deepCompare(path, cands); err != nil {
+					fmt.Fprintf(os.Stderr, "정밀 비교 생략: %v\n", err)
+				}
 			}
 			top := cands[0]
 			if top.Similarity >= 0.5 && top.ContentHash != "" {
@@ -303,7 +350,94 @@ func cmdIdentify() *cobra.Command {
 		},
 	}
 	c.Flags().IntVar(&limit, "limit", 5, "후보 수")
+	c.Flags().BoolVar(&deep, "deep", false, "사내 docsim으로 정밀·의미 비교 (LM_DOCSIM=docsim 실행 파일 경로)")
 	return c
+}
+
+// deepCompare 는 2단 구성의 2단계다: LSH로 좁힌 후보를 사내 docsim
+// (슁글 + 의미 임베딩 2엔진)으로 정밀 비교한다. 발급 시 저장된 docsim
+// 지문(compare-fp)을 쓰므로 후보의 원문이 없어도 된다.
+func deepCompare(path string, cands []gatesdk.IdentifyCandidate) error {
+	bin := os.Getenv("LM_DOCSIM")
+	if bin == "" {
+		return fmt.Errorf("LM_DOCSIM 미설정 (예: export LM_DOCSIM=~/docsim/.venv/bin/docsim)")
+	}
+	mineFP := docsimFingerprint(path)
+	if mineFP == "" {
+		return fmt.Errorf("질의 파일의 docsim 지문 생성 실패")
+	}
+	mine, err := os.CreateTemp("", "lm-deep-mine-*.fp.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(mine.Name())
+	mine.WriteString(mineFP)
+	mine.Close()
+
+	fmt.Println("\ndocsim 정밀 비교 (엔진A 슁글 / 엔진B 의미):")
+	compared := 0
+	for i, cd := range cands {
+		if cd.DocsimFp == "" {
+			continue
+		}
+		cf, err := os.CreateTemp("", "lm-deep-cand-*.fp.json")
+		if err != nil {
+			continue
+		}
+		cf.WriteString(cd.DocsimFp)
+		cf.Close()
+		cmd := exec.Command(bin, "compare-fp", mine.Name(), cf.Name(), "--json")
+		cmd.Env = os.Environ()
+		out, err := cmd.Output()
+		os.Remove(cf.Name())
+		if err != nil {
+			fmt.Printf("  %d. docGuid=%s — docsim 비교 실패: %v\n", i+1, cd.DocGUID, err)
+			continue
+		}
+		fmt.Printf("  %d. docGuid=%s → %s\n", i+1, cd.DocGUID, summarizeDocsim(out))
+		compared++
+	}
+	if compared == 0 {
+		fmt.Println("  (docsim 지문이 저장된 후보가 없습니다 — LM_DOCSIM 설정 상태에서 발급된 문서만 정밀 비교 가능)")
+	}
+	return nil
+}
+
+// summarizeDocsim 은 docsim compare-fp JSON에서 핵심 수치만 추린다.
+// 스키마 상세에 의존하지 않도록 알려진 키만 찾아보고, 없으면 원문 일부를 보여준다.
+func summarizeDocsim(out []byte) string {
+	var m map[string]interface{}
+	if err := json.Unmarshal(out, &m); err != nil {
+		s := strings.TrimSpace(string(out))
+		if len(s) > 160 {
+			s = s[:160] + "…"
+		}
+		return s
+	}
+	var parts []string
+	if v, ok := m["verdict"].(map[string]interface{}); ok {
+		if rel, ok := v["relation"].(string); ok {
+			parts = append(parts, "관계="+rel)
+		}
+	}
+	for key, name := range map[string]string{"shingle": "슁글", "embed": "의미"} {
+		if e, ok := m[key].(map[string]interface{}); ok {
+			for _, k := range []string{"jaccard", "similarity", "score", "max"} {
+				if f, ok := e[k].(float64); ok {
+					parts = append(parts, fmt.Sprintf("%s=%.2f", name, f))
+					break
+				}
+			}
+		}
+	}
+	if len(parts) == 0 {
+		s := strings.TrimSpace(string(out))
+		if len(s) > 160 {
+			s = s[:160] + "…"
+		}
+		return s
+	}
+	return strings.Join(parts, " · ")
 }
 
 // ── lm restore 문서.docx ────────────────────────────────────
@@ -331,7 +465,16 @@ func cmdRestore() *cobra.Command {
 			}
 			info, err := client().LabelByHash(context.Background(), hash)
 			if err != nil {
-				return fmt.Errorf("원장 조회 실패 — 정확 일치 기록이 없으면 lm identify 로 유사 문서를 찾아보세요: %w", err)
+				// 원시 해시 미등록 → 텍스트 해시로 재시도 (재저장본 복원)
+				if th := textHashHex(path, data); th != "" {
+					if tinfo, terr := client().LabelByTextHash(context.Background(), th); terr == nil {
+						fmt.Println("원시 해시 미등록 — 텍스트 해시로 재식별했습니다 (재저장·재압축본)")
+						info, err = tinfo, nil
+					}
+				}
+				if err != nil {
+					return fmt.Errorf("원장 조회 실패 — 정확 일치 기록이 없으면 lm identify 로 유사 문서를 찾아보세요: %w", err)
+				}
 			}
 			if info.Destroyed {
 				return fmt.Errorf("이 문서는 파기되었습니다(docGuid=%s) — 라벨을 복원하지 않습니다. 사본이라면 회수 대상입니다", info.DocGUID)
@@ -413,6 +556,7 @@ func cmdScan() *cobra.Command {
 				if fp := fingerprintB64(path, data); fp != "" {
 					req.Fingerprint = &gatesdk.FingerprintDecl{MinHash: fp}
 				}
+				req.TextHash = textHashHex(path, data)
 				// 해시를 멱등키로 써서 재실행해도 원장 행이 중복되지 않게 한다
 				resp, err := client().IssueLabel(context.Background(), req, "scan:"+hash)
 				if err != nil {
@@ -460,6 +604,8 @@ func cmdVerify() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("해시 대상 계산 %s: %w", path, err)
 				}
+				// 재저장·재압축본 재식별용 2차 색인
+				req.TextHash = textHashHex(path, data)
 				// 내장 라벨 우선, 없으면 사이드카
 				if der, err := attacher.Extract(bytes.NewReader(data), int64(len(data))); err == nil {
 					req.LabelDER = base64.StdEncoding.EncodeToString(der)

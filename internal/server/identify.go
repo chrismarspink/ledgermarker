@@ -55,6 +55,9 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 		IssuerOrg     string  `json:"issuerOrg,omitempty"`
 		ContentHash   string  `json:"contentHash,omitempty"`
 		Revoked       bool    `json:"revoked"`
+		// DocsimFp: 발급 시 제출된 사내 docsim 정밀 지문 — 클라이언트가
+		// 정밀·의미 비교(lm identify --deep)에 사용한다.
+		DocsimFp string `json:"docsimFp,omitempty"`
 	}
 	var out []candidate
 	for doc, otherMH := range cands {
@@ -73,6 +76,7 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 			c.IssuerOrg = latest.IssuerOrg
 			c.ContentHash = hex.EncodeToString(latest.ContentHash)
 			c.Revoked = !latest.Type.IsIssuance()
+			c.DocsimFp = latest.DocsimFP
 		}
 		out = append(out, c)
 	}

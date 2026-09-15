@@ -55,6 +55,11 @@ type Event struct {
 	AttachMethod   string // embedded | container | sidecar | ledger_only
 	FormatID       string // formats.yaml 의 id (unknown 포함)
 	FallbackReason string // "" | not_implemented | attach_failed
+	// TextHash: 정규화 본문 텍스트의 SHA-256 (SigNET H-5 흡수) —
+	// 재저장·재압축으로 바이트가 바뀌어도 유지되는 2차 식별 색인.
+	TextHash []byte
+	// DocsimFP: 사내 docsim 모듈의 정밀 지문(JSON, 원문 복원 불가) — 선택.
+	DocsimFP string
 	PrevHash       []byte
 	RowHash        []byte
 	CreatedAt      time.Time

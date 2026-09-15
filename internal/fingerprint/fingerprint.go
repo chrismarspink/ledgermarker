@@ -13,6 +13,7 @@
 package fingerprint
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
@@ -87,6 +88,20 @@ func MinHash(shingles map[uint64]struct{}) []uint64 {
 // FromText 는 텍스트에서 시그니처를 바로 만든다.
 func FromText(text string) []uint64 {
 	return MinHash(Shingles(NormalizeForFP(text)))
+}
+
+// TextHash 는 정규화 텍스트의 SHA-256 이다 — SigNET 실측 계획의 H-5
+// ("본문 텍스트 해시는 서식 변경에도 안정적")를 흡수한 2차 식별자.
+// 편집기 재저장·재압축으로 파일 바이트가 통째로 바뀌어도, 본문 텍스트가
+// 같으면 같은 값이 나와 정확 재식별이 가능하다.
+// 텍스트 추출 불가 형식이면 (nil, false).
+func TextHash(filename string, data []byte) ([]byte, bool) {
+	text, ok := ExtractText(filename, data)
+	if !ok {
+		return nil, false
+	}
+	sum := sha256.Sum256([]byte(NormalizeForFP(text)))
+	return sum[:], true
 }
 
 // Similarity 는 두 시그니처의 Jaccard 유사도 추정치(0~1)다.

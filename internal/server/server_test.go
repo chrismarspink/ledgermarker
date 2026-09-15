@@ -412,3 +412,73 @@ func TestIdentifyAndRestore(t *testing.T) {
 		t.Fatal("unknown hash must 404")
 	}
 }
+
+// SigNET 흡수 검증: ① 텍스트 해시 2차 재식별(H-5) — 재저장으로 바이트가
+// 바뀌어도 본문 텍스트가 같으면 동일 문서로 식별·복원, ② 라벨 상속(v2-6) —
+// 파생물의 자동 하향 금지.
+func TestAbsorbSignet_TextHashAndInheritance(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	text := "제1조(목적) 이 규정은 재저장 생존성 검증을 위한 표본이다.\n제2조 본문 텍스트는 동일하다."
+	th, ok := fingerprint.TextHash("표본.txt", []byte(text))
+	if !ok {
+		t.Fatal("text hash")
+	}
+	thHex := hex.EncodeToString(th)
+
+	// 발급: 원본 바이트 v1 + 텍스트 해시
+	orig, err := e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf("bytes-v1-original"), Grade: "S", TextHash: thHex,
+	}, "th1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 재저장 시뮬레이션: 바이트는 완전히 다르지만(해시 상이) 텍스트는 동일
+	res, err := e.c.Verify(ctx, gatesdk.VerifyRequest{
+		ContentHash: hashOf("bytes-v2-resaved"), TextHash: thHex, Level: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Checks.Ledger != "registered" {
+		t.Fatalf("resaved file must be re-identified via text hash: %+v (%v)", res.Checks, res.Reasons)
+	}
+	found := false
+	for _, r := range res.Reasons {
+		if r == "reidentified_by_text_hash" {
+			found = true
+		}
+	}
+	if !found || res.Attribution.DocGUID != orig.DocGUID || res.Attribution.Grade != "S" {
+		t.Fatalf("text-hash re-id: %+v (%v)", res.Attribution, res.Reasons)
+	}
+	// 텍스트 해시로 라벨 복원
+	info, err := e.c.LabelByTextHash(ctx, thHex)
+	if err != nil || info.DocGUID != orig.DocGUID {
+		t.Fatalf("restore by text hash: %v", err)
+	}
+
+	// 상속 규칙: S 부모의 파생물을 O로 발급 → 승인 토큰 없으면 403
+	_, err = e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf("파생본"), Grade: "O",
+		Lineage: &gatesdk.LineageDecl{ParentHash: hashOf("bytes-v1-original"), Transform: "extract"},
+	}, "inh1")
+	if apiErr, ok := err.(*gatesdk.APIError); !ok || apiErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("derived downgrade without token must be 403, got %v", err)
+	}
+	// 승인 토큰이 있으면 하향 파생 허용
+	if _, err := e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf("파생본"), Grade: "O",
+		Lineage:       &gatesdk.LineageDecl{ParentHash: hashOf("bytes-v1-original"), Transform: "extract"},
+		ApprovalToken: "secret-approval-token",
+	}, "inh2"); err != nil {
+		t.Fatalf("derived downgrade with token must succeed: %v", err)
+	}
+	// 동급 상속(S→S)은 토큰 불필요
+	if _, err := e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf("파생본S"), Grade: "S",
+		Lineage: &gatesdk.LineageDecl{ParentHash: hashOf("bytes-v1-original"), Transform: "edit"},
+	}, "inh3"); err != nil {
+		t.Fatalf("same-grade derive must succeed: %v", err)
+	}
+}

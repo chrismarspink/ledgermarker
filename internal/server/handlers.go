@@ -20,6 +20,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		LabelDER    string `json:"labelDer,omitempty"` // 없으면 폴백 검증
 		ContentHash string `json:"contentHash"`        // 필수
+		TextHash    string `json:"textHash,omitempty"` // 2차 식별(재저장본 재식별)
 		Level       int    `json:"level,omitempty"`    // 1|2|3(Phase 2)
 	}
 	if err := readJSON(r, &req); err != nil {
@@ -44,9 +45,16 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		Roots:          s.rootsPool(r.Context()),
 		RevokedSerials: s.cfg.RevokedSerials(),
 	}
+	var textHash []byte
+	if req.TextHash != "" {
+		if th, err := hex.DecodeString(req.TextHash); err == nil && len(th) == 32 {
+			textHash = th
+		}
+	}
 	res, err := verify.Run(r.Context(), deps, verify.Params{
 		LabelDER:    labelDER,
 		ContentHash: contentHash,
+		TextHash:    textHash,
 		Level:       req.Level,
 	})
 	if err != nil {

@@ -119,6 +119,21 @@ func (m *Memory) EventsByContentHash(_ context.Context, hash []byte) ([]ledger.E
 	return out, nil
 }
 
+func (m *Memory) EventsByTextHash(_ context.Context, textHash []byte) ([]ledger.Event, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.Unavailable {
+		return nil, ErrUnavailable
+	}
+	var out []ledger.Event
+	for _, e := range m.events {
+		if len(e.TextHash) > 0 && bytes.Equal(e.TextHash, textHash) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 func (m *Memory) LatestByDoc(_ context.Context, docGUID uuid.UUID) (*ledger.Event, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

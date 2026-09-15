@@ -49,6 +49,8 @@ type LedgerReader interface {
 	// EventsByContentHash 는 해당 해시의 이벤트를 seq 오름차순으로 반환한다.
 	// 원장 접속 불가 시 에러를 반환한다("없음"은 빈 슬라이스 + nil 에러).
 	EventsByContentHash(ctx context.Context, hash []byte) ([]ledger.Event, error)
+	// EventsByTextHash 는 텍스트 해시(2차 식별자)로 조회한다.
+	EventsByTextHash(ctx context.Context, textHash []byte) ([]ledger.Event, error)
 	// LatestByDoc 은 문서의 최신 이벤트를 반환한다. 없으면 (nil, nil).
 	LatestByDoc(ctx context.Context, docGUID uuid.UUID) (*ledger.Event, error)
 }
@@ -57,7 +59,10 @@ type LedgerReader interface {
 type Params struct {
 	LabelDER    []byte // 없으면 폴백 검증(해시만으로 조회)
 	ContentHash []byte // 필수
-	Level       int    // 1=로컬, 2=원장, 3=상호(Phase 2)
+	// TextHash 는 정규화 본문 텍스트 해시(선택) — 원시 해시가 미등록일 때
+	// 재저장·재압축본을 정확 재식별하는 2차 색인 (SigNET H-5 흡수).
+	TextHash []byte
+	Level    int // 1=로컬, 2=원장, 3=상호(Phase 2)
 }
 
 // Deps 는 검증 의존성이다.
@@ -147,10 +152,22 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 			// 접속 불가: 판단 보류. "미등록"과 절대 혼동하지 말 것.
 			res.Checks.Ledger = LedgerUnavailable
 			res.Reasons = append(res.Reasons, "ledger_unavailable")
+		} else if len(events) == 0 && len(p.TextHash) == 32 {
+			// 원시 해시 미등록 → 텍스트 해시 2차 조회: 재저장·재압축으로
+			// 바이트가 바뀐 파일을 정확 재식별한다 (본문 텍스트 동일).
+			tevents, terr := deps.Ledger.EventsByTextHash(ctx, p.TextHash)
+			if terr == nil && len(tevents) > 0 {
+				events = tevents
+				res.Reasons = append(res.Reasons, "reidentified_by_text_hash")
+			} else {
+				res.Checks.Ledger = LedgerUnregistered
+				res.Reasons = append(res.Reasons, "ledger_unregistered")
+			}
 		} else if len(events) == 0 {
 			res.Checks.Ledger = LedgerUnregistered
 			res.Reasons = append(res.Reasons, "ledger_unregistered")
-		} else {
+		}
+		if len(events) > 0 {
 			res.Checks.Ledger = LedgerRegistered
 			res.Reasons = append(res.Reasons, "ledger_registered")
 			// 제시된 라벨과 정확히 일치하는 발급 이벤트를 우선 매칭한다 —

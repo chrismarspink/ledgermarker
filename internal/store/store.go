@@ -26,6 +26,9 @@ type Store interface {
 
 	// ── 검증·계보 조회 ──
 	EventsByContentHash(ctx context.Context, hash []byte) ([]ledger.Event, error)
+	// EventsByTextHash 는 텍스트 해시(2차 식별자)로 조회한다 —
+	// 재저장·재압축된 파일의 정확 재식별용.
+	EventsByTextHash(ctx context.Context, textHash []byte) ([]ledger.Event, error)
 	LatestByDoc(ctx context.Context, docGUID uuid.UUID) (*ledger.Event, error)
 	ChildrenOf(ctx context.Context, contentHash []byte) ([]ledger.Event, error)
 
