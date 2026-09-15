@@ -76,6 +76,18 @@ func textHashHex(path string, data []byte) string {
 	return hex.EncodeToString(th)
 }
 
+// docsimDir 는 docsim 실행 작업 디렉터리다 (config.yaml·mu.npy 위치).
+// LM_DOCSIM_DIR 이 없으면 .venv 경로에서 프로젝트 루트를 추정한다.
+func docsimDir(bin string) string {
+	if d := os.Getenv("LM_DOCSIM_DIR"); d != "" {
+		return d
+	}
+	if i := strings.Index(bin, "/.venv/"); i > 0 {
+		return bin[:i]
+	}
+	return ""
+}
+
 // docsimFingerprint 는 사내 docsim 모듈로 정밀 지문을 계산한다.
 // LM_DOCSIM 환경변수(docsim 실행 파일 경로)가 설정된 경우에만 동작 —
 // docsim 코드는 수정하지 않고 CLI 어댑터로만 결합한다.
@@ -90,8 +102,10 @@ func docsimFingerprint(path string) string {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	cmd := exec.Command(bin, "fingerprint", path, "-o", tmp.Name())
+	abs, _ := filepath.Abs(path)
+	cmd := exec.Command(bin, "fingerprint", abs, "-o", tmp.Name())
 	cmd.Env = os.Environ()
+	cmd.Dir = docsimDir(bin)
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "(docsim 지문 생략: %v)\n", err)
 		return ""
@@ -388,6 +402,7 @@ func deepCompare(path string, cands []gatesdk.IdentifyCandidate) error {
 		cf.Close()
 		cmd := exec.Command(bin, "compare-fp", mine.Name(), cf.Name(), "--json")
 		cmd.Env = os.Environ()
+		cmd.Dir = docsimDir(bin)
 		out, err := cmd.Output()
 		os.Remove(cf.Name())
 		if err != nil {
@@ -416,13 +431,15 @@ func summarizeDocsim(out []byte) string {
 	}
 	var parts []string
 	if v, ok := m["verdict"].(map[string]interface{}); ok {
-		if rel, ok := v["relation"].(string); ok {
+		if lbl, ok := v["label"].(string); ok && lbl != "" {
+			parts = append(parts, "판정="+lbl)
+		} else if rel, ok := v["relation"].(string); ok {
 			parts = append(parts, "관계="+rel)
 		}
 	}
 	for key, name := range map[string]string{"shingle": "슁글", "embed": "의미"} {
 		if e, ok := m[key].(map[string]interface{}); ok {
-			for _, k := range []string{"jaccard", "similarity", "score", "max"} {
+			for _, k := range []string{"jaccard", "max_cosine", "similarity", "score"} {
 				if f, ok := e[k].(float64); ok {
 					parts = append(parts, fmt.Sprintf("%s=%.2f", name, f))
 					break
