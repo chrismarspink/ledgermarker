@@ -75,8 +75,9 @@ export default function VerifyPage() {
           {result.checks?.signature === 'absent' && result.checks?.ledger === 'registered' && (
             <RestoreLabel meta={result.meta} />
           )}
-          {result.checks?.ledger === 'unregistered' && pair.doc && (
-            <IdentifyPanel doc={pair.doc} />
+          {pair.doc && (
+            <IdentifyPanel doc={pair.doc}
+              autoOpen={result.checks?.ledger === 'unregistered'} />
           )}
           <StructureView structure={result.meta?.structure} />
           {pair.doc && result.meta?.structure?.derBytes && (
@@ -288,10 +289,12 @@ function RestoreLabel({ meta }) {
 
 // 유사 문서 재식별 — 원장에 정확 일치가 없을 때, 내용 유사도로 원본 후보를
 // 찾는다. 텍스트 형식이면 서버가 docsim으로 정밀·의미 판정까지 채워 준다.
-function IdentifyPanel({ doc }) {
+function IdentifyPanel({ doc, autoOpen }) {
   const [state, setState] = React.useState('idle') // idle|busy|done|error|unsupported
   const [cands, setCands] = React.useState([])
   const [error, setError] = React.useState('')
+
+  React.useEffect(() => { if (autoOpen) run() /* eslint-disable-line */ }, [])
 
   async function run() {
     setState('busy'); setError('')
@@ -309,10 +312,11 @@ function IdentifyPanel({ doc }) {
 
   return (
     <div className="card">
-      <h2>유사 문서 재식별</h2>
+      <h2>유사 문서 재식별 (docsim)</h2>
       <p className="hint">
-        원장에 정확히 일치하는 기록이 없습니다. 내용 유사도로 원본 후보를 찾습니다
-        (수정본·형식 변환본). 이 기능은 본문 텍스트를 서버로 전송합니다.
+        내용 유사도로 원장의 원본 후보를 찾습니다 (수정본·형식 변환본·재작성).
+        텍스트 형식이면 사내 docsim이 정밀·의미 판정까지 채웁니다.
+        이 기능은 본문 텍스트를 서버로 전송합니다.
       </p>
       {state === 'idle' && <button className="primary" onClick={run}>유사 문서 찾기</button>}
       {state === 'busy' && <p>분석 중…</p>}
