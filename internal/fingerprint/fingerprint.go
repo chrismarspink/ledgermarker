@@ -32,12 +32,15 @@ const (
 	seedBase  = 0x4c4d5f4650 // "LM_FP"
 )
 
-// NormalizeForFP 는 지문용 텍스트 정규화다: NFC → 소문자 → 공백 연속을
-// 단일 공백으로. 서식·줄바꿈 차이가 유사도를 흐리지 않게 한다.
+// NormalizeForFP 는 지문용 텍스트 정규화다: NFC → 소문자 → 공백 전부 제거.
+// 공백을 전부 없애는 이유: 편집기·변환기(예: docx→PDF)마다 텍스트를 서로
+// 다르게 분절해 글자 사이 공백이 달라진다("제1조" ↔ "제 1 조"). 공백을
+// 남기면 문자 n-gram 슁글이 완전히 어긋나 같은 문서도 유사도가 0이 된다.
+// 공백 제거로 docx·PDF·재저장본의 지문이 수렴한다.
 func NormalizeForFP(text string) string {
 	s := norm.NFC.String(text)
 	s = strings.ToLower(s)
-	return strings.Join(strings.Fields(s), " ")
+	return strings.Join(strings.Fields(s), "")
 }
 
 // Shingles 는 정규화 텍스트의 문자 k-gram 해시 집합을 만든다.

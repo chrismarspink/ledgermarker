@@ -216,7 +216,29 @@ export async function extractTextForIdentify(fileName, buf) {
   if (['.docx', '.pptx', '.xlsx', '.hwpx', '.odt', '.ods', '.odp'].includes(ext)) {
     return extractZipXmlText(new Uint8Array(buf))
   }
+  if (ext === '.pdf') {
+    return extractPdfText(buf)
+  }
   return null
+}
+
+// PDF 텍스트 레이어 추출 (pdf.js). 스캔 PDF(텍스트 없음)는 null.
+async function extractPdfText(buf) {
+  try {
+    const pdfjs = await import('pdfjs-dist')
+    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise
+    let out = ''
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const tc = await page.getTextContent()
+      out += tc.items.map((it) => it.str).join(' ') + ' '
+    }
+    return out.trim() || null
+  } catch {
+    return null
+  }
 }
 
 // 최소 ZIP 파서 — deflate 해제를 위해 DecompressionStream(브라우저 내장) 사용.
