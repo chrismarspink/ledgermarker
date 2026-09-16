@@ -19,6 +19,9 @@ async function req(method, path, body, apiKey, idemKey) {
 }
 
 export const api = {
+  // 지문 유사도 재식별 — text가 있으면 서버가 docsim 정밀 판정을 채운다.
+  identify: (minhash, text) =>
+    req('POST', '/v1/identify', { minhash, text: text || undefined, limit: 5 }),
   verify: (payload) => req('POST', '/v1/verify', payload),
   issue: (payload, apiKey, idemKey) => req('POST', '/v1/labels', payload, apiKey, idemKey),
   revoke: (docGuid, reason, apiKey) =>

@@ -200,6 +200,70 @@ export async function analyzeFile(fileName, buf) {
   return { contentHash, textHash, bodyBytes: bytes, labelDerBytes: null, labelSource: '없음', format }
 }
 
+// 재식별용 본문 텍스트 추출 (브라우저). txt·md·csv·log는 그대로,
+// docx·pptx·xlsx·hwpx·odt는 ZIP 내 XML에서 태그 제거. 서버가 최종 지문을
+// 계산하므로 완벽 일치는 불필요(대략적 텍스트면 유사도 후보에 충분).
+// 추출 불가면 null (PDF 등은 CLI lm identify 사용).
+export async function extractTextForIdentify(fileName, buf) {
+  const name = fileName.toLowerCase()
+  const ext = name.slice(name.lastIndexOf('.'))
+  if (['.txt', '.md', '.markdown', '.csv', '.log'].includes(ext)) {
+    const bytes = new Uint8Array(buf)
+    const emb = extractEmbedded(buf)
+    const text = new TextDecoder().decode(emb ? emb.original : bytes)
+    return stripLM(text).body ?? text
+  }
+  if (['.docx', '.pptx', '.xlsx', '.hwpx', '.odt', '.ods', '.odp'].includes(ext)) {
+    return extractZipXmlText(new Uint8Array(buf))
+  }
+  return null
+}
+
+// 최소 ZIP 파서 — deflate 해제를 위해 DecompressionStream(브라우저 내장) 사용.
+async function extractZipXmlText(bytes) {
+  try {
+    const entries = parseZipEntries(bytes)
+    let out = ''
+    for (const e of entries) {
+      const n = e.name.toLowerCase()
+      if (!n.endsWith('.xml')) continue
+      if (!(n.startsWith('word/') || n.startsWith('ppt/slides/') || n.startsWith('xl/') ||
+        n === 'content.xml' || n.startsWith('contents/'))) continue
+      let data = e.data
+      if (e.method === 8) {
+        const ds = new DecompressionStream('deflate-raw')
+        const buf = await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer()
+        data = new Uint8Array(buf)
+      }
+      const xml = new TextDecoder().decode(data).replace(/></g, '> <')
+      out += xml.replace(/<[^>]*>/g, '') + ' '
+    }
+    return out.trim() || null
+  } catch {
+    return null
+  }
+}
+
+// ZIP local file header들을 훑어 (name, method, data) 목록을 만든다.
+function parseZipEntries(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const out = []
+  let i = 0
+  while (i + 4 <= bytes.length && dv.getUint32(i, true) === 0x04034b50) {
+    const method = dv.getUint16(i + 8, true)
+    const compSize = dv.getUint32(i + 18, true)
+    const nameLen = dv.getUint16(i + 26, true)
+    const extraLen = dv.getUint16(i + 28, true)
+    const nameStart = i + 30
+    const name = new TextDecoder().decode(bytes.slice(nameStart, nameStart + nameLen))
+    const dataStart = nameStart + nameLen + extraLen
+    if (compSize === 0 && (dv.getUint16(i + 6, true) & 0x08)) break // data descriptor — 생략
+    out.push({ name, method, data: bytes.slice(dataStart, dataStart + compSize) })
+    i = dataStart + compSize
+  }
+  return out
+}
+
 // 내장 라벨 파일 생성 (생성 화면용). 지원하지 않으면 null.
 export function buildEmbedded(format, fileName, buf, derBytes) {
   if (format.id === 'markdown') {

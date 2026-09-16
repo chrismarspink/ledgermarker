@@ -31,10 +31,29 @@ func (s *Server) handleKeys(w http.ResponseWriter, r *http.Request) {
 		resp["checkpointSigner"] = info
 	}
 	revoked := []string{}
-	for sn := range s.cfg.RevokedSerials() {
+	for sn := range s.allRevokedSerials() {
 		revoked = append(revoked, sn)
 	}
 	resp["revokedCertSerials"] = revoked
+
+	// 발급기관 선택을 위한 전체 발급자 목록 (기본 + 추가 기관)
+	issuers := []map[string]interface{}{}
+	for id, iss := range s.allIssuers() {
+		entry := map[string]interface{}{"orgId": id, "orgName": iss.OrgName}
+		if cert, err := x509.ParseCertificate(iss.LabelSigner.CertDER()); err == nil {
+			li := certJSON(cert, "라벨 서명 (Label Signer)")
+			li["privateKeyLocation"] = "서버 키스토어(softhsm/KCMVP) — 반출 불가, 90일 자동 교체"
+			entry["labelSigner"] = li
+		}
+		if iss.CACert != nil {
+			ca := certJSON(iss.CACert, "기관 서명 CA (Org Root CA)")
+			ca["privateKeyLocation"] = "오프라인 보관 — 수동 운영, 10년"
+			entry["ca"] = ca
+		}
+		issuers = append(issuers, entry)
+	}
+	resp["issuers"] = issuers // 발급기관 선택용
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

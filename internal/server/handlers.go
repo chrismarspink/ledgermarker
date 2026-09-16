@@ -43,7 +43,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	deps := verify.Deps{
 		Ledger:         s.cfg.Store,
 		Roots:          s.rootsPool(r.Context()),
-		RevokedSerials: s.cfg.RevokedSerials(),
+		RevokedSerials: s.allRevokedSerials(),
 	}
 	var textHash []byte
 	if req.TextHash != "" {
@@ -227,12 +227,20 @@ func (s *Server) handleTrustList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	revoked := []string{}
-	for sn := range s.cfg.RevokedSerials() {
+	for sn := range s.allRevokedSerials() {
 		revoked = append(revoked, sn)
+	}
+	// 모든 발급기관 CA를 노출한다(PWA 오프라인 L1 검증이 서명 기관을 신뢰하도록).
+	issuers := []map[string]string{}
+	for id, iss := range s.allIssuers() {
+		issuers = append(issuers, map[string]string{
+			"orgId": id, "orgName": iss.OrgName, "caCert": string(iss.CACertPEM),
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"orgId":  s.cfg.IssuerOrg,
 		"caCert": string(s.cfg.CACertPEM),
+		"issuers": issuers, // 발급기관별 CA·표시명
 		// 라벨 폐기(원장 이벤트)와 별개인 인증서 폐기 목록 (CRL 대용, §5.3)
 		"revokedCertSerials": revoked,
 		"anchors":            anchors,

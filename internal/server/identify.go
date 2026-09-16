@@ -19,19 +19,34 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 		MinHash string  `json:"minhash"` // base64(uint64×128 BE)
 		Limit   int     `json:"limit,omitempty"`
 		MinSim  float64 `json:"minSimilarity,omitempty"`
+		// Text: 제공되고 docsim이 구성되어 있으면 후보를 docsim으로 정밀
+		// 비교해 verdict를 실어 준다(웹의 정밀 판정 표시용). 원문은 저장하지
+		// 않고 docsim 지문 생성에만 쓰인다.
+		Text string `json:"text,omitempty"`
 	}
-	if err := readJSON(r, &req); err != nil || req.MinHash == "" {
-		writeErr(w, http.StatusBadRequest, "minhash is required")
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	mh, err := base64.StdEncoding.DecodeString(req.MinHash)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, "minhash must be base64")
-		return
-	}
-	sig, err := fingerprint.Decode(mh)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	// minhash 또는 text 중 하나는 있어야 한다. text가 오면 서버가 MinHash를
+	// 계산한다(브라우저가 Go와 동일한 지문을 만들 필요가 없도록) — 원문은
+	// 저장하지 않고 지문 계산·docsim 비교에만 쓴다.
+	var sig []uint64
+	if req.MinHash != "" {
+		mh, err := base64.StdEncoding.DecodeString(req.MinHash)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "minhash must be base64")
+			return
+		}
+		sig, err = fingerprint.Decode(mh)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else if req.Text != "" {
+		sig = fingerprint.FromText(req.Text)
+	} else {
+		writeErr(w, http.StatusBadRequest, "minhash or text is required")
 		return
 	}
 	if req.Limit <= 0 || req.Limit > 20 {
@@ -58,6 +73,8 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 		// DocsimFp: 발급 시 제출된 사내 docsim 정밀 지문 — 클라이언트가
 		// 정밀·의미 비교(lm identify --deep)에 사용한다.
 		DocsimFp string `json:"docsimFp,omitempty"`
+		// Deep: 서버가 docsim으로 비교한 정밀 판정(웹 표시용, 선택).
+		Deep *deepVerdict `json:"deep,omitempty"`
 	}
 	var out []candidate
 	for doc, otherMH := range cands {
@@ -83,6 +100,25 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(out, func(i, j int) bool { return out[i].Similarity > out[j].Similarity })
 	if len(out) > req.Limit {
 		out = out[:req.Limit]
+	}
+	// 정밀 판정(선택): 질의 텍스트가 오고 docsim이 구성되어 있으면 후보를
+	// 서버가 docsim으로 비교해 verdict를 채운다.
+	if req.Text != "" && s.cfg.DocsimBin != "" {
+		mineFP, err := docsimFingerprintText(s.cfg.DocsimBin, s.cfg.DocsimDir, req.Text)
+		if err != nil {
+			s.log.Warn("docsim query fingerprint failed", "err", err)
+		} else {
+			for i := range out {
+				if out[i].DocsimFp == "" {
+					continue
+				}
+				v, err := docsimCompareFP(s.cfg.DocsimBin, s.cfg.DocsimDir, mineFP, out[i].DocsimFp)
+				if err == nil {
+					out[i].Deep = v
+				}
+				out[i].DocsimFp = "" // 응답에 지문 원본은 싣지 않는다(용량·불필요)
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"candidates": out,

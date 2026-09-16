@@ -146,3 +146,6 @@ table.ledger td.mono { font-family: ui-monospace, monospace; font-size: 12px; }
 .sbadge.s-C { background: #eef1f6; color: var(--muted); }
 .warnicon { cursor: help; }
 table.ledger tr.hl td { background: #fff8d6; }
+
+/* 발급기관 로고 (검증 결과) */
+.org-logo { width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,.15); }

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { orgLabel } from '../lib/orgs.js'
+import { orgLabel, orgLogo } from '../lib/orgs.js'
 
 // 검증 결과를 단순 O/X로 합치지 않는다 — 5개 체크 항목을 각각 표시하고,
 // 종합 판정(verdictHint)은 보조로만 보여준다 (DEV SPEC §8.3).
@@ -55,6 +55,10 @@ export default function ResultCard({ result }) {
 
       <div className="attribution">
         <div className={`grade ${grade === 'S' || grade === 'O' ? grade : 'unknown'}`}>{grade}</div>
+        {attribution.issuerOrg && (
+          <img className="org-logo" src={orgLogo(attribution.issuerOrg)}
+            alt={orgLabel(attribution.issuerOrg)} title={orgLabel(attribution.issuerOrg)} />
+        )}
         <div>
           <div><b>{attribution.issuerOrg ? orgLabel(attribution.issuerOrg) : '발급기관 미상'}</b> · {attribution.approvalState || '-'}</div>
           <div className="mono">docGuid {attribution.docGuid || '-'}</div>

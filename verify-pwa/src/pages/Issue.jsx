@@ -17,9 +17,15 @@ export default function IssuePage() {
   const [done, setDone] = React.useState(null)
   const [form, setForm] = React.useState({
     grade: 'S', basisClause: '', keywords: '', brmPath: '',
-    approvalState: 'CONFIRMED', transform: 'edit', notAfterDays: 365
+    approvalState: 'CONFIRMED', transform: 'edit', notAfterDays: 365,
+    issuerOrg: '', sign: true
   })
+  const [issuers, setIssuers] = React.useState([])
   const [apiKey, setApiKey] = React.useState(localStorage.getItem('lm-api-key') || '')
+
+  React.useEffect(() => {
+    api.keys().then((k) => setIssuers(k.issuers || [])).catch(() => {})
+  }, [])
   const fileRef = React.useRef()
   const parentRef = React.useRef()
 
@@ -68,6 +74,9 @@ export default function IssuePage() {
         notAfterDays: Number(form.notAfterDays) || 365,
         attach: { method, formatId: format.id, fallbackReason }
       }
+      if (form.issuerOrg) payload.issuerOrg = form.issuerOrg
+      if (!form.sign) payload.sign = false
+      if (analysis.textHash) payload.textHash = analysis.textHash
       if (form.basisClause) payload.basisClause = Number(form.basisClause)
       if (form.keywords.trim()) {
         payload.basisKeywords = form.keywords.split(',').map((s) => s.trim()).filter(Boolean)
@@ -82,17 +91,19 @@ export default function IssuePage() {
 
       const res = await api.issue(payload, apiKey, 'web:' + contentHash)
 
-      // 내장 라벨 파일 생성 (형식별 방식 — 준비 중 형식은 사이드카만)
-      const der = Uint8Array.from(atob(res.labelDer), (c) => c.charCodeAt(0))
-      const labeled = canEmbed ? buildEmbedded(format, file.name, buf, der) : null
+      // 서명 없는 등록이면 다운로드할 라벨이 없다 — 원장 등록만
+      const unsigned = !res.labelDer
+      const der = unsigned ? null : Uint8Array.from(atob(res.labelDer), (c) => c.charCodeAt(0))
+      const labeled = !unsigned && canEmbed ? buildEmbedded(format, file.name, buf, der) : null
       setDone({
         res,
         format,
         method,
         fallbackReason,
+        unsigned,
         fileName: file.name,
         labeledUrl: labeled ? URL.createObjectURL(labeled) : null,
-        sidecarUrl: URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' }))
+        sidecarUrl: unsigned ? null : URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' }))
       })
     } catch (e) {
       setError(e.message)
@@ -118,6 +129,25 @@ export default function IssuePage() {
       </div>
 
       <div className="card form">
+        <h2>발급기관 · 서명</h2>
+        <div className="fields">
+          <label>발급기관
+            <select value={form.issuerOrg} onChange={set('issuerOrg')}>
+              <option value="">기본 기관</option>
+              {issuers.map((it) => (
+                <option key={it.orgId} value={it.orgId}>
+                  {it.orgName || it.orgId} ({it.orgId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>서명
+            <select value={form.sign ? '1' : '0'} onChange={(e) => setForm({ ...form, sign: e.target.value === '1' })}>
+              <option value="1">전자서명 포함 (권장)</option>
+              <option value="0">서명 없이 원장 등록만</option>
+            </select>
+          </label>
+        </div>
         <h2>라벨 필드</h2>
         <div className="fields">
           <label>등급
@@ -191,27 +221,37 @@ export default function IssuePage() {
             <br />형식: {done.format.name} · 붙이는 방법:{' '}
             <Link to={`/help/formats#${done.format.id}`}>{METHOD_KO[done.method]}</Link>
           </div>
-          {done.labeledUrl ? (
-            <p>
-              <a className="download" href={done.labeledUrl} download={done.fileName}>
-                ⬇ 이름표 내장 파일 받기 — {done.fileName}
-              </a>
+          {done.unsigned ? (
+            <p className="hint">
+              <b>서명 없이 원장 등록만 완료했습니다.</b> 붙일 이름표(라벨)가 없으므로
+              다운로드 파일은 없습니다. 검증 시 서명=absent, 원장=registered로 나오며
+              해시로 문서를 알아봅니다.
             </p>
           ) : (
-            <p className="hint">
-              {done.fallbackReason === 'not_implemented'
-                ? '이 형식은 파일 안에 넣는 방식이 준비 중이라, 지금은 옆에 별도 파일(.lmsig)로 붙입니다.'
-                : done.fallbackReason === 'attach_failed'
-                  ? '파일 안에 넣기가 실패해(예: ZIP 코멘트가 이미 사용 중) 옆에 별도 파일(.lmsig)로 붙입니다.'
-                  : '이 형식은 옆에 별도 파일(.lmsig)로 붙입니다.'}
-              {done.format.warning && <> ⚠ {done.format.warning}</>}
-            </p>
+            <>
+              {done.labeledUrl ? (
+                <p>
+                  <a className="download" href={done.labeledUrl} download={done.fileName}>
+                    ⬇ 이름표 내장 파일 받기 — {done.fileName}
+                  </a>
+                </p>
+              ) : (
+                <p className="hint">
+                  {done.fallbackReason === 'not_implemented'
+                    ? '이 형식은 파일 안에 넣는 방식이 준비 중이라, 지금은 옆에 별도 파일(.lmsig)로 붙입니다.'
+                    : done.fallbackReason === 'attach_failed'
+                      ? '파일 안에 넣기가 실패해(예: ZIP 코멘트가 이미 사용 중) 옆에 별도 파일(.lmsig)로 붙입니다.'
+                      : '이 형식은 옆에 별도 파일(.lmsig)로 붙입니다.'}
+                  {done.format.warning && <> ⚠ {done.format.warning}</>}
+                </p>
+              )}
+              <p>
+                <a href={done.sidecarUrl} download={done.fileName + '.lmsig'}>
+                  {done.labeledUrl ? '사이드카(.lmsig)로도 받기' : '⬇ 이름표 파일(.lmsig) 받기 — 문서와 함께 보관하세요'}
+                </a>
+              </p>
+            </>
           )}
-          <p>
-            <a href={done.sidecarUrl} download={done.fileName + '.lmsig'}>
-              {done.labeledUrl ? '사이드카(.lmsig)로도 받기' : '⬇ 이름표 파일(.lmsig) 받기 — 문서와 함께 보관하세요'}
-            </a>
-          </p>
           <p className="hint">
             발급 사실은 항상 대장에 기록되므로, 이름표가 사라져도 문서를 알아볼 수
             있습니다. 형식별 자세한 내용은 <Link to="/help/formats">도움말 › 파일 형식별 지원</Link>.

@@ -155,6 +155,7 @@ func cmdIssue() *cobra.Command {
 	var parent, approval string
 	var force bool
 	var embed bool
+	var noSign bool
 	c := &cobra.Command{
 		Use:   "issue <파일>",
 		Short: "단일 파일 라벨 발급 (기본: .lmsig 사이드카, --embed: 파일에 트레일러 내장)",
@@ -180,6 +181,10 @@ func cmdIssue() *cobra.Command {
 				return fmt.Errorf("해시 대상 계산: %w", err)
 			}
 			req.ContentHash = hash
+			if noSign {
+				no := false
+				req.Sign = &no
+			}
 			// 지문 제출 — 수정본·변환본 재식별(identify)의 색인이 된다
 			if fp := fingerprintB64(path, data); fp != "" {
 				req.Fingerprint = &gatesdk.FingerprintDecl{MinHash: fp}
@@ -257,6 +262,9 @@ func cmdIssue() *cobra.Command {
 				return fmt.Errorf("labelDer 디코드: %w", err)
 			}
 			switch {
+			case noSign:
+				// 서명 없이 원장 등록만 — 파일에 붙일 라벨이 없다
+				fmt.Printf("원장 등록 완료 (서명 없음 — 검증 시 signature=absent): %s\n", path)
 			case alreadyLabeled:
 				_ = der
 				fmt.Printf("원장 재등록 완료 (기존 라벨 유지): %s\n", path)
@@ -301,6 +309,8 @@ func cmdIssue() *cobra.Command {
 	c.Flags().IntVar(&req.NotAfterDays, "not-after-days", 365, "라벨 유효기간(일)")
 	c.Flags().BoolVar(&force, "force", false, "기존 사이드카 덮어쓰기(재발급)")
 	c.Flags().BoolVar(&embed, "embed", false, "사이드카 대신 파일 끝에 라벨 트레일러 내장 (원본 내용 불변, 검증 시 자동 인식)")
+	c.Flags().StringVar(&req.IssuerOrg, "issuer", "", "발급기관 선택 (예: KPOST, INNOTIUM). 기본: 서버 기본 기관")
+	c.Flags().BoolVar(&noSign, "no-sign", false, "서명 없이 원장 등록만 (검증 시 signature=absent)")
 	transformFlag := c.Flags().String("transform", "edit", "--parent 지정 시 변환 종류 (edit|convert|merge|extract)")
 	c.PreRun = func(_ *cobra.Command, _ []string) {
 		if parent != "" {

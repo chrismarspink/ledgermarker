@@ -48,6 +48,11 @@ type IssueRequest struct {
 	DocsimFp string `json:"docsimFp,omitempty"`
 	// ApprovalToken: 파생물 등급이 부모보다 낮을 때(상속 규칙 하향) 필수.
 	ApprovalToken string `json:"approvalToken,omitempty"`
+	// IssuerOrg: 발급기관 선택(예: KPOST, INNOTIUM). 빈 값이면 기본 기관.
+	IssuerOrg string `json:"issuerOrg,omitempty"`
+	// Sign: 서명 포함 여부. nil/true면 CMS 서명 라벨 생성, false면 원장
+	// 등록만(라벨 서명 없음 — 검증 시 signature=absent).
+	Sign *bool `json:"sign,omitempty"`
 }
 
 // FingerprintDecl 은 지문 제출이다.
@@ -186,12 +191,15 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		}
 	}
 
+	// 발급기관 선택: issuerOrg가 지정되면 그 기관 키로 서명한다.
+	iss := s.issuerFor(req.IssuerOrg)
+
 	lbl := &issue.Label{
 		Grade:          req.Grade,
 		BasisClause:    req.BasisClause,
 		BasisKeywords:  req.BasisKeywords,
 		BRMPath:        req.BRMPath,
-		IssuerOrgID:    s.cfg.IssuerOrg,
+		IssuerOrgID:    iss.OrgID,
 		DocGUID:        docGUID,
 		ContentHash:    contentHash,
 		ApproverRank:   req.ApproverRank,
@@ -206,12 +214,26 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 	}
 	issue.EnsureFreshness(lbl, req.NotAfterDays)
 
-	der, err := issue.Build(ctx, s.cfg.LabelSigner, lbl)
-	if err != nil {
-		if errors.Is(err, issue.ErrGradeC) || errors.Is(err, issue.ErrBadGrade) {
+	// 서명 on/off: sign=false면 CMS 라벨을 만들지 않고 원장 등록만 한다
+	// (해시로 귀속·검증은 가능, 검증 시 signature=absent).
+	signed := req.Sign == nil || *req.Sign
+	var der []byte
+	var signerSN string
+	if signed {
+		var err error
+		der, err = issue.Build(ctx, iss.LabelSigner, lbl)
+		if err != nil {
+			if errors.Is(err, issue.ErrGradeC) || errors.Is(err, issue.ErrBadGrade) {
+				return nil, http.StatusBadRequest, err
+			}
+			return nil, http.StatusInternalServerError, fmt.Errorf("build label: %w", err)
+		}
+		signerSN = iss.LabelSigner.SerialNumber()
+	} else {
+		// 미서명이라도 등급 유효성은 검사한다 (C 거부).
+		if err := issue.ValidateGrade(req.Grade); err != nil {
 			return nil, http.StatusBadRequest, err
 		}
-		return nil, http.StatusInternalServerError, fmt.Errorf("build label: %w", err)
 	}
 
 	ev := &ledger.Event{
@@ -227,8 +249,8 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		RootDocID:     rootDocID,
 		Transform:     transform,
 		LabelDER:      der,
-		IssuerOrg:     s.cfg.IssuerOrg,
-		SignerCertSN:  s.cfg.LabelSigner.SerialNumber(),
+		IssuerOrg:     iss.OrgID,
+		SignerCertSN:  signerSN,
 		Actor:         actor,
 		DocsimFP:      req.DocsimFp,
 	}

@@ -27,6 +27,10 @@ type Config struct {
 	// RevokedSerials 는 폐기 인증서 일련번호를 반환한다(CRL 대용).
 	RevokedSerials func() map[string]bool
 	IssuerOrg      string
+	// Issuers 는 발급기관 선택을 위한 추가 발급자 집합이다(선택).
+	// 키는 orgId. 발급 요청의 issuerOrg가 여기 있으면 그 기관 키로 서명한다.
+	// 비어 있으면 IssuerOrg/LabelSigner 단일 기관으로 동작(하위 호환).
+	Issuers map[string]*Issuer
 	// APIKeys 가 비어 있지 않으면 비공개 엔드포인트에 X-LM-Key를 요구한다.
 	// ✎ 운영 환경 인증 방식(mTLS vs API Key) 확정 필요 (DEV SPEC §13-4).
 	APIKeys []string
@@ -41,9 +45,23 @@ type Config struct {
 	// Treaty 는 등가성 협정 서비스다(선택). 검증 L3 반영은 Phase 2 —
 	// Phase 1은 목록 노출(/v1/treaties)까지만 한다.
 	Treaty treaty.Service
+	// DocsimBin/DocsimDir: 사내 docsim 실행 파일과 작업 디렉터리(선택).
+	// 설정되면 /v1/identify 에서 텍스트가 오면 정밀 판정을 채워 준다.
+	DocsimBin string
+	DocsimDir string
 	Logger               *slog.Logger
 	// RefreshView 는 쓰기 후 current_label 구체화 뷰 갱신 훅(선택)이다.
 	RefreshView func(ctx context.Context) error
+}
+
+// Issuer 는 한 발급기관의 서명 자산이다.
+type Issuer struct {
+	OrgID          string
+	OrgName        string // 표시명(예: 우정사업본부) — 로고와 함께 검증 결과에 노출
+	LabelSigner    lmcrypto.Signer
+	CACert         *x509.Certificate
+	CACertPEM      []byte
+	RevokedSerials func() map[string]bool
 }
 
 type Server struct {
@@ -53,6 +71,35 @@ type Server struct {
 	log    *slog.Logger
 
 	issueMu sync.Mutex // 멱등키 확인→발급을 직렬화 (T12)
+}
+
+// issuerFor 는 orgId에 맞는 발급자를 반환한다. 빈 문자열이거나 미등록이면
+// 기본 발급기관(cfg.IssuerOrg/LabelSigner)을 쓴다.
+func (s *Server) issuerFor(orgID string) *Issuer {
+	if orgID != "" && s.cfg.Issuers != nil {
+		if iss, ok := s.cfg.Issuers[orgID]; ok {
+			return iss
+		}
+	}
+	return &Issuer{
+		OrgID:          s.cfg.IssuerOrg,
+		OrgName:        s.cfg.IssuerOrg,
+		LabelSigner:    s.cfg.LabelSigner,
+		CACert:         s.cfg.CACert,
+		CACertPEM:      s.cfg.CACertPEM,
+		RevokedSerials: s.cfg.RevokedSerials,
+	}
+}
+
+// allIssuers 는 기본 발급기관 + 추가 발급기관을 orgId→Issuer로 반환한다.
+func (s *Server) allIssuers() map[string]*Issuer {
+	out := map[string]*Issuer{
+		s.cfg.IssuerOrg: s.issuerFor(""),
+	}
+	for id, iss := range s.cfg.Issuers {
+		out[id] = iss
+	}
+	return out
 }
 
 func New(cfg Config) *Server {
@@ -143,11 +190,13 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// rootsPool 은 자기 CA + 신뢰목록의 파트너 CA로 검증 풀을 만든다.
+// rootsPool 은 모든 발급기관 CA + 신뢰목록의 파트너 CA로 검증 풀을 만든다.
 func (s *Server) rootsPool(ctx context.Context) *x509.CertPool {
 	pool := x509.NewCertPool()
-	if s.cfg.CACert != nil {
-		pool.AddCert(s.cfg.CACert)
+	for _, iss := range s.allIssuers() {
+		if iss.CACert != nil {
+			pool.AddCert(iss.CACert)
+		}
 	}
 	anchors, err := s.cfg.Store.TrustAnchors(ctx)
 	if err != nil {
@@ -158,6 +207,22 @@ func (s *Server) rootsPool(ctx context.Context) *x509.CertPool {
 		pool.AppendCertsFromPEM([]byte(a.CertPEM))
 	}
 	return pool
+}
+
+// allRevokedSerials 는 모든 발급기관의 폐기 인증서 일련번호를 합친다.
+func (s *Server) allRevokedSerials() map[string]bool {
+	out := map[string]bool{}
+	for _, iss := range s.allIssuers() {
+		if iss.RevokedSerials == nil {
+			continue
+		}
+		for sn, v := range iss.RevokedSerials() {
+			if v {
+				out[sn] = true
+			}
+		}
+	}
+	return out
 }
 
 func (s *Server) refreshView(ctx context.Context) {

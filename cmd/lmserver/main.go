@@ -48,6 +48,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 추가 발급기관 — LM_ISSUERS="INNOTIUM:이노티움:./keystore-innotium,..."
+	// (orgId:표시명:키스토어경로). 발급 시 issuerOrg로 선택한다.
+	issuers := map[string]*server.Issuer{}
+	if v := os.Getenv("LM_ISSUERS"); v != "" {
+		for _, spec := range strings.Split(v, ",") {
+			parts := strings.SplitN(strings.TrimSpace(spec), ":", 3)
+			if len(parts) != 3 {
+				log.Error("invalid LM_ISSUERS spec (want orgId:name:dir)", "spec", spec)
+				os.Exit(1)
+			}
+			id, name, dir := parts[0], parts[1], parts[2]
+			iks, err := softhsm.Open(dir, id)
+			if err != nil {
+				log.Error("open issuer keystore", "org", id, "dir", dir, "err", err)
+				os.Exit(1)
+			}
+			issuers[id] = &server.Issuer{
+				OrgID: id, OrgName: name,
+				LabelSigner:    iks.LabelSigner(),
+				CACert:         iks.CACert(),
+				CACertPEM:      iks.CACertPEM(),
+				RevokedSerials: iks.RevokedSerials,
+			}
+			log.Info("issuer registered", "org", id, "name", name, "dir", dir)
+		}
+	}
+
 	ctx := context.Background()
 	var st store.Store
 	var refresh func(context.Context) error
@@ -95,10 +122,13 @@ func main() {
 		CACertPEM:            ks.CACertPEM(),
 		RevokedSerials:       ks.RevokedSerials,
 		IssuerOrg:            issuerOrg,
+		Issuers:              issuers,
 		APIKeys:              apiKeys,
 		RegradeApprovalToken: regradeToken,
 		DestroyApprovalToken: destroyToken,
 		Treaty:               treatySvc,
+		DocsimBin:            os.Getenv("LM_DOCSIM"),
+		DocsimDir:            docsimDir(os.Getenv("LM_DOCSIM")),
 		Logger:               log,
 		RefreshView:          refresh,
 	})
@@ -120,4 +150,16 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// docsimDir 는 docsim 실행 파일 경로에서 프로젝트 루트를 추정한다
+// (config.yaml·mu.npy 위치). LM_DOCSIM_DIR 이 있으면 그것을 쓴다.
+func docsimDir(bin string) string {
+	if d := os.Getenv("LM_DOCSIM_DIR"); d != "" {
+		return d
+	}
+	if i := strings.Index(bin, "/.venv/"); i > 0 {
+		return bin[:i]
+	}
+	return ""
 }

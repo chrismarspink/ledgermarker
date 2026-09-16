@@ -105,6 +105,8 @@ type IssueRequest struct {
 	TextHash            string           `json:"textHash,omitempty"`      // 2차 식별 색인
 	DocsimFp            string           `json:"docsimFp,omitempty"`      // docsim 정밀 지문 (선택)
 	ApprovalToken       string           `json:"approvalToken,omitempty"` // 파생물 하향 상속 승인
+	IssuerOrg           string           `json:"issuerOrg,omitempty"`     // 발급기관 선택
+	Sign                *bool            `json:"sign,omitempty"`          // 서명 on/off (기본 on)
 }
 
 // FingerprintDecl 은 내용 유사도 지문 제출이다 (MinHash, base64).

@@ -4,7 +4,8 @@ import { sha256Hex, sha256HexBytes, bytesToBase64, hexToBytes } from '../lib/has
 import { api, getTrustListCached } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
 import { extractEmbedded } from '../lib/embed.js'
-import { analyzeFile } from '../lib/attach.js'
+import { analyzeFile, extractTextForIdentify } from '../lib/attach.js'
+import { orgLabel } from '../lib/orgs.js'
 import ResultCard from '../components/ResultCard.jsx'
 import StructureView from '../components/StructureView.jsx'
 import AttackDemo from '../components/AttackDemo.jsx'
@@ -73,6 +74,9 @@ export default function VerifyPage() {
           )}
           {result.checks?.signature === 'absent' && result.checks?.ledger === 'registered' && (
             <RestoreLabel meta={result.meta} />
+          )}
+          {result.checks?.ledger === 'unregistered' && pair.doc && (
+            <IdentifyPanel doc={pair.doc} />
           )}
           <StructureView structure={result.meta?.structure} />
           {pair.doc && result.meta?.structure?.derBytes && (
@@ -278,6 +282,69 @@ function RestoreLabel({ meta }) {
         </a>
       )}
       {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+
+// 유사 문서 재식별 — 원장에 정확 일치가 없을 때, 내용 유사도로 원본 후보를
+// 찾는다. 텍스트 형식이면 서버가 docsim으로 정밀·의미 판정까지 채워 준다.
+function IdentifyPanel({ doc }) {
+  const [state, setState] = React.useState('idle') // idle|busy|done|error|unsupported
+  const [cands, setCands] = React.useState([])
+  const [error, setError] = React.useState('')
+
+  async function run() {
+    setState('busy'); setError('')
+    try {
+      const buf = await doc.arrayBuffer()
+      const text = await extractTextForIdentify(doc.name, buf)
+      if (!text) { setState('unsupported'); return }
+      const res = await api.identify(null, text)
+      setCands(res.candidates || [])
+      setState('done')
+    } catch (e) {
+      setError(e.message); setState('error')
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>유사 문서 재식별</h2>
+      <p className="hint">
+        원장에 정확히 일치하는 기록이 없습니다. 내용 유사도로 원본 후보를 찾습니다
+        (수정본·형식 변환본). 이 기능은 본문 텍스트를 서버로 전송합니다.
+      </p>
+      {state === 'idle' && <button className="primary" onClick={run}>유사 문서 찾기</button>}
+      {state === 'busy' && <p>분석 중…</p>}
+      {state === 'unsupported' && (
+        <p className="hint">이 형식은 웹에서 텍스트 추출을 지원하지 않습니다 — CLI: <code>lm identify {doc.name}</code></p>
+      )}
+      {state === 'error' && <p className="error">{error}</p>}
+      {state === 'done' && cands.length === 0 && (
+        <p className="hint">유사한 등록 문서를 찾지 못했습니다 (유사도 0.3 미만).</p>
+      )}
+      {state === 'done' && cands.length > 0 && (
+        <div className="tablewrap">
+          <table className="ledger">
+            <thead><tr><th>유사도</th><th>등급</th><th>발급기관</th><th>docGuid</th><th>docsim 정밀 판정</th></tr></thead>
+            <tbody>
+              {cands.map((c, i) => (
+                <tr key={i} className={c.revoked ? 'revoked' : ''}>
+                  <td><b>{Math.round(c.similarity * 100)}%</b></td>
+                  <td>{c.grade || '-'}</td>
+                  <td>{orgLabel(c.issuerOrg)}</td>
+                  <td className="mono" title={c.docGuid}>{c.docGuid.slice(0, 8)}…</td>
+                  <td>
+                    {c.deep
+                      ? <>{c.deep.label || c.deep.relation} <span className="hint">(문자 {c.deep.shingle?.toFixed(2)} · 의미 {c.deep.semantic?.toFixed(2)})</span></>
+                      : <span className="hint">지문만 (docsim 미구성)</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

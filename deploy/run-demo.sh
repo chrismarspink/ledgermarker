@@ -17,8 +17,11 @@ exec env \
   LM_ADDR=:8090 \
   LM_ISSUER_ORG=KPOST \
   LM_KEYSTORE=./keystore \
+  LM_ISSUERS="INNOTIUM:이노티움:./keystore-innotium" \
   LM_TREATIES=./deploy/treaties.demo.json \
   LM_REGRADE_TOKEN=demo-regrade \
   LM_DESTROY_TOKEN=demo-destroy \
+  LM_DOCSIM="$HOME/docsim/.venv/bin/docsim" \
+  DOCSIM_HMAC_KEY="${DOCSIM_HMAC_KEY:-lm-poc-demo-key}" \
   LM_DB_URL="postgres://postgres:lm-demo-pw@localhost:5434/ledgermarker?sslmode=disable" \
   ./bin/lmserver
