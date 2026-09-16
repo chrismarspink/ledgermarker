@@ -83,19 +83,34 @@ export default function KeysPage() {
       {error && <p className="error">{error}</p>}
 
       <div className="card">
-        <h2>자기 기관 키 체계 — {keys ? orgLabel(keys.orgId) : '…'}</h2>
+        <h2>발급기관 키 체계</h2>
         <p className="hint">
-          기관 서명 CA가 두 서명자에게 인증서를 발급하는 2계층 구조입니다.
-          모든 개인키는 키스토어 밖으로 나오지 않으며, 이 화면의 값은 전부 공개 정보입니다.
+          기관 서명 CA가 서명자에게 인증서를 발급하는 2계층 구조입니다. 발급 시
+          아래 기관 중 하나를 선택해 서명합니다. 모든 개인키는 키스토어 밖으로
+          나오지 않으며, 이 화면의 값은 전부 공개 정보입니다.
         </p>
-        {keys && (
+        {(keys?.issuers || []).map((it) => (
+          <div key={it.orgId} style={{ marginBottom: 18 }}>
+            <h3 className="sv-h">{it.orgName ? `${it.orgName} (${it.orgId})` : orgLabel(it.orgId)}</h3>
+            <div className="keychain">
+              <KeyPairBox info={it.ca} tone="ca" />
+              <div className="keyarrow">│ 인증서 발급(서명) ↓</div>
+              <KeyPairBox info={it.labelSigner} tone="signer" />
+            </div>
+          </div>
+        ))}
+        {keys && !(keys.issuers || []).length && (
           <div className="keychain">
             <KeyPairBox info={keys.ca} tone="ca" />
             <div className="keyarrow">│ 인증서 발급(서명) ↓</div>
             <KeyPairBox info={keys.labelSigner} tone="signer" />
-            <div className="keyarrow" style={{ paddingLeft: 0 }} />
-            <KeyPairBox info={keys.checkpointSigner} tone="sig" />
           </div>
+        )}
+        {keys?.checkpointSigner && (
+          <>
+            <h3 className="sv-h">원장 봉인 (공통)</h3>
+            <div className="keychain"><KeyPairBox info={keys.checkpointSigner} tone="sig" /></div>
+          </>
         )}
         {keys?.revokedCertSerials?.length > 0 && (
           <p className="hint">폐기된 서명 인증서: {keys.revokedCertSerials.length}건 (신뢰목록과 함께 배포)</p>
