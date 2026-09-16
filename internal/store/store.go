@@ -46,6 +46,9 @@ type Store interface {
 	// FingerprintCandidates 는 버킷을 하나라도 공유하는 문서들의
 	// (docGUID → minhash)를 반환한다.
 	FingerprintCandidates(ctx context.Context, buckets []string) (map[uuid.UUID][]byte, error)
+	// DeleteFingerprints 는 한 문서의 기존 지문 행을 지운다(재색인용).
+	// 지문 테이블은 불변 원장과 달리 갱신 가능한 2차 색인이다.
+	DeleteFingerprints(ctx context.Context, docGUID uuid.UUID) error
 
 	// ── 통계 (admin 대시보드) ──
 	EventCounts(ctx context.Context) (map[string]int64, error)

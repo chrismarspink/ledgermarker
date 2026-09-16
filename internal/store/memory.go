@@ -207,6 +207,19 @@ func (m *Memory) InsertFingerprint(_ context.Context, docGUID uuid.UUID, minhash
 	return nil
 }
 
+func (m *Memory) DeleteFingerprints(_ context.Context, docGUID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	kept := m.fps[:0]
+	for _, fp := range m.fps {
+		if fp.doc != docGUID {
+			kept = append(kept, fp)
+		}
+	}
+	m.fps = kept
+	return nil
+}
+
 func (m *Memory) FingerprintCandidates(_ context.Context, buckets []string) (map[uuid.UUID][]byte, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

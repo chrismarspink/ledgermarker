@@ -112,6 +112,14 @@ func (s *Server) handleIssue(w http.ResponseWriter, r *http.Request) {
 	if cached, err := s.cfg.Store.GetIdempotent(r.Context(), idemKey); err == nil && cached != nil {
 		var resp IssueResponse
 		if json.Unmarshal(cached, &resp) == nil {
+			// 재발급(같은 파일)이라도 지문은 갱신한다 — 지문 정규화·LSH가
+			// 바뀌면 기존 색인이 낡아 재식별이 안 되기 때문. 지문 테이블은
+			// 불변 원장과 달리 갱신 가능한 2차 색인이다.
+			if req.Fingerprint != nil && req.Fingerprint.MinHash != "" {
+				if docGUID, perr := uuid.Parse(resp.DocGUID); perr == nil {
+					s.refreshFingerprint(r.Context(), docGUID, req.Fingerprint.MinHash)
+				}
+			}
 			writeJSON(w, http.StatusCreated, resp)
 			return
 		}
@@ -290,15 +298,7 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 	}
 	// 지문 저장 (관찰적 재식별용) — 실패해도 발급은 유효 (부가 색인)
 	if req.Fingerprint != nil && req.Fingerprint.MinHash != "" {
-		if mh, err := base64.StdEncoding.DecodeString(req.Fingerprint.MinHash); err == nil {
-			if sig, err := fingerprint.Decode(mh); err == nil {
-				if err := s.cfg.Store.InsertFingerprint(ctx, docGUID, mh, fingerprint.Buckets(sig)); err != nil {
-					s.log.Warn("insert fingerprint failed", "docGuid", docGUID, "err", err)
-				}
-			} else {
-				s.log.Warn("invalid fingerprint submitted", "docGuid", docGUID, "err", err)
-			}
-		}
+		s.refreshFingerprint(ctx, docGUID, req.Fingerprint.MinHash)
 	}
 	s.refreshView(ctx)
 	// 로그에는 해시·GUID만 남긴다 — 본문·지문 원본 금지 (DEV SPEC §12)
@@ -313,6 +313,25 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		NotAfter:  lbl.NotAfter,
 		Attach:    attachOut,
 	}, 0, nil
+}
+
+// refreshFingerprint 는 문서의 지문 색인을 최신 지문으로 교체한다.
+// 기존 지문을 지우고 새로 넣어, 정규화·LSH 규칙이 바뀌어도 재식별이 된다.
+func (s *Server) refreshFingerprint(ctx context.Context, docGUID uuid.UUID, minhashB64 string) {
+	mh, err := base64.StdEncoding.DecodeString(minhashB64)
+	if err != nil {
+		s.log.Warn("invalid fingerprint b64", "docGuid", docGUID, "err", err)
+		return
+	}
+	sig, err := fingerprint.Decode(mh)
+	if err != nil {
+		s.log.Warn("invalid fingerprint submitted", "docGuid", docGUID, "err", err)
+		return
+	}
+	_ = s.cfg.Store.DeleteFingerprints(ctx, docGUID) // 낡은 색인 제거(없으면 무시)
+	if err := s.cfg.Store.InsertFingerprint(ctx, docGUID, mh, fingerprint.Buckets(sig)); err != nil {
+		s.log.Warn("insert fingerprint failed", "docGuid", docGUID, "err", err)
+	}
 }
 
 // handleLabelByHash 는 해시로 라벨 원본을 회수한다 (GET /v1/labels/by-hash/{hash}).

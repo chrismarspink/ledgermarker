@@ -221,6 +221,13 @@ func (p *Postgres) InsertFingerprint(ctx context.Context, docGUID uuid.UUID, min
 	return nil
 }
 
+func (p *Postgres) DeleteFingerprints(ctx context.Context, docGUID uuid.UUID) error {
+	if _, err := p.pool.Exec(ctx, `DELETE FROM fingerprint WHERE doc_guid = $1`, docGUID); err != nil {
+		return fmt.Errorf("store: delete fingerprints: %w", err)
+	}
+	return nil
+}
+
 func (p *Postgres) FingerprintCandidates(ctx context.Context, buckets []string) (map[uuid.UUID][]byte, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT DISTINCT ON (doc_guid) doc_guid, minhash
