@@ -92,8 +92,8 @@ export default function IssuePage() {
       const res = await api.issue(payload, apiKey, 'web:' + contentHash)
 
       // 서명 없는 등록이면 다운로드할 라벨이 없다 — 원장 등록만
-      const unsigned = !res.labelDer
-      const der = unsigned ? null : Uint8Array.from(atob(res.labelDer), (c) => c.charCodeAt(0))
+      const unsigned = !res.labelData
+      const der = unsigned ? null : Uint8Array.from(atob(res.labelData), (c) => c.charCodeAt(0))
       const labeled = !unsigned && canEmbed ? buildEmbedded(format, file.name, buf, der) : null
       setDone({
         res,

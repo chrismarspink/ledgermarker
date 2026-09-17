@@ -8,8 +8,8 @@ import ResultCard from './ResultCard.jsx'
 // 변조를 가한 뒤 각각을 검증해, 탐지 여부를 기준선과 나란히 보여준다.
 // 모든 변조는 브라우저 메모리 사본에만 적용 — 원본 파일·원장 불변.
 
-// grade 속성 OID 1.3.6.1.4.1.55555.53.1.2 의 DER
-const OID_GRADE_DER = new Uint8Array([
+// grade 속성 식별자 바이트열
+const OID_GRADE_BYTES = new Uint8Array([
   0x06, 0x0b, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xb2, 0x03, 0x35, 0x01, 0x02
 ])
 
@@ -26,9 +26,9 @@ function findSeq(hay, needle) {
 // 등급 바이트('S'↔'O')를 위조한 사본 (T1 시나리오)
 function forgeGrade(der) {
   const out = der.slice()
-  const i = findSeq(out, OID_GRADE_DER)
+  const i = findSeq(out, OID_GRADE_BYTES)
   if (i < 0) return null
-  for (let k = i + OID_GRADE_DER.length; k < i + OID_GRADE_DER.length + 8 && k + 2 < out.length; k++) {
+  for (let k = i + OID_GRADE_BYTES.length; k < i + OID_GRADE_BYTES.length + 8 && k + 2 < out.length; k++) {
     if (out[k] === 0x0c && out[k + 1] === 0x01) {
       out[k + 2] = out[k + 2] === 0x53 ? 0x4f : 0x53
       return { der: out, where: `offset ${k + 2}` }
@@ -118,7 +118,7 @@ async function runScenarios(doc, sig) {
   if (forged) {
     scenarios.push({
       title: `라벨 등급 위조 (S↔O, ${forged.where})`,
-      desc: '라벨 안의 등급 1바이트를 위조했습니다. 등급은 평문이라 읽히지만 signedAttributes 전체가 서명 대상이므로 서명 검증이 반드시 실패합니다 (T1). 진짜 등급은 원장 귀속으로 드러납니다.',
+      desc: '라벨 안의 등급 1바이트를 위조했습니다. 등급은 평문이라 읽히지만 서명 대상 속성 전체가 서명에 묶여 있으므로 서명 검증이 반드시 실패합니다 (T1). 진짜 등급은 원장 귀속으로 드러납니다.',
       hash: baseHash, der: forged.der, expectDeny: true
     })
   }
@@ -127,7 +127,7 @@ async function runScenarios(doc, sig) {
   sigForged[sigForged.length - 3] ^= 0xff
   scenarios.push({
     title: '서명값 변조 (서명 위조)',
-    desc: '라벨 끝의 ECDSA 서명 바이트를 바꿨습니다 — 서명키 없이 라벨을 조작하려는 시도의 축약형. 암호학적 검증이 실패합니다.',
+    desc: '라벨 끝의 서명 바이트를 바꿨습니다 — 서명키 없이 라벨을 조작하려는 시도의 축약형. 암호학적 검증이 실패합니다.',
     hash: baseHash, der: sigForged, expectDeny: true
   })
 
@@ -140,7 +140,7 @@ async function runScenarios(doc, sig) {
   const out = []
   for (const s of scenarios) {
     const payload = { contentHash: s.hash, level: 2 }
-    if (s.der) payload.labelDer = bytesToBase64(s.der)
+    if (s.der) payload.labelData = bytesToBase64(s.der)
     const result = await api.verify(payload)
     result.meta = { fileName: s.title, contentHash: s.hash }
     let caught = null

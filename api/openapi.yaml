@@ -59,7 +59,7 @@ components:
       type: object
       properties:
         docGuid: { type: string, format: uuid }
-        labelDer: { type: string, description: base64 CMS SignedData }
+        labelData: { type: string, description: base64 서명 데이터 }
         ledgerSeq: { type: integer, format: int64 }
         rootDocId: { type: string, format: uuid }
         issuedAt: { type: string, format: date-time }
@@ -75,7 +75,7 @@ components:
       type: object
       required: [contentHash]
       properties:
-        labelDer: { type: string, description: base64. 없으면 폴백 검증(해시만 조회) }
+        labelData: { type: string, description: base64 서명 데이터. 없으면 폴백 검증(해시만 조회) }
         contentHash: { type: string, description: hex SHA-256 — 필수 }
         textHash: { type: string, description: 정규화 본문 텍스트 해시(hex, 공백 제거) — 재저장·재압축본의 2차 재식별 }
         level: { type: integer, enum: [1, 2, 3], default: 2, description: 3(협정)은 Phase 2 }
@@ -240,7 +240,7 @@ paths:
         - { name: hash, in: path, required: true, schema: { type: string }, description: hex SHA-256 }
         - { name: kind, in: query, schema: { type: string, enum: [content, text] }, description: text = 텍스트 해시(재저장본)로 조회 }
       responses:
-        "200": { description: "{docGuid, grade, labelDer, revoked, destroyed, ...}" }
+        "200": { description: "{docGuid, grade, labelData, revoked, destroyed, ...}" }
         "404": { description: 원장에 라벨 없음 }
   /formats:
     get:

@@ -4,24 +4,25 @@ import { ContentInfo, SignedData } from 'pkijs'
 import { LM_OID, pemToCert } from '../lib/cms.js'
 import { getTrustListCached } from '../lib/api.js'
 
-// 파일 내부 구조 + 라벨(CMS) ASN.1 구조 뷰어.
+// 파일 내부 구조 + 라벨(서명 데이터) 구조 뷰어.
 // 검증 결과의 "왜"를 바이트 수준까지 눈으로 확인할 수 있게 한다.
 
+// 렌더링 라벨은 일반 용어로 표기한다(구현 세부 표준·알고리즘명 비노출).
 const OID_NAMES = {
-  '1.2.840.113549.1.7.1': 'data',
-  '1.2.840.113549.1.7.2': 'signedData',
-  '1.2.840.113549.1.9.3': 'contentType',
-  '1.2.840.113549.1.9.4': 'messageDigest (문서 해시 결속)',
-  '1.2.840.113549.1.9.5': 'signingTime',
-  '2.16.840.1.101.3.4.2.1': 'sha-256',
-  '1.2.840.10045.4.3.2': 'ecdsa-with-SHA256',
-  '1.2.840.10045.2.1': 'ecPublicKey',
-  '1.2.840.10045.3.1.7': 'P-256 (prime256v1)',
-  '2.5.4.3': 'commonName',
-  '2.5.4.10': 'organizationName',
-  '2.5.29.15': 'keyUsage',
-  '2.5.29.19': 'basicConstraints',
-  '2.5.29.37': 'extKeyUsage'
+  '1.2.840.113549.1.7.1': '데이터',
+  '1.2.840.113549.1.7.2': '서명 데이터',
+  '1.2.840.113549.1.9.3': '콘텐츠 유형',
+  '1.2.840.113549.1.9.4': '문서 해시 결속',
+  '1.2.840.113549.1.9.5': '서명 시각',
+  '2.16.840.1.101.3.4.2.1': '해시 알고리즘',
+  '1.2.840.10045.4.3.2': '서명 알고리즘',
+  '1.2.840.10045.2.1': '공개키',
+  '1.2.840.10045.3.1.7': '공개키 파라미터',
+  '2.5.4.3': '기관/주체명',
+  '2.5.4.10': '조직명',
+  '2.5.29.15': '키 용도',
+  '2.5.29.19': '인증서 제약',
+  '2.5.29.37': '확장 키 용도'
 }
 
 function oidName(dotted) {
@@ -29,10 +30,11 @@ function oidName(dotted) {
   return OID_NAMES[dotted] || null
 }
 
+// 구조 태그도 일반 용어로(인코딩 세부 비노출).
 const UNIVERSAL = {
-  1: 'BOOLEAN', 2: 'INTEGER', 3: 'BIT STRING', 4: 'OCTET STRING', 5: 'NULL',
-  6: 'OBJECT IDENTIFIER', 10: 'ENUMERATED', 12: 'UTF8String', 16: 'SEQUENCE',
-  17: 'SET', 19: 'PrintableString', 23: 'UTCTime', 24: 'GeneralizedTime'
+  1: '불리언', 2: '정수', 3: '비트열', 4: '바이트열', 5: '없음',
+  6: '식별자', 10: '열거값', 12: '문자열', 16: '묶음',
+  17: '집합', 19: '문자열', 23: '시각', 24: '시각'
 }
 
 function hexTrunc(view, max = 24) {
@@ -79,7 +81,7 @@ function Asn1Node({ node, depth }) {
   const kids = node.idBlock.isConstructed ? node.valueBlock.value || [] : []
   const size = node.valueBeforeDecodeView?.byteLength
   const name = tagName(node)
-  const isLM = name === 'OBJECT IDENTIFIER' && LM_OID[node.valueBlock?.toString?.()]
+  const isLM = name === '식별자' && LM_OID[node.valueBlock?.toString?.()]
   if (kids.length === 0) {
     const v = scalarValue(node)
     return (
@@ -118,8 +120,8 @@ function FileLayout({ s }) {
             <li>
               라벨 트레일러 <span className="range">[{fmt(s.originalSize)} – {fmt(s.fileSize)})</span> {fmt(s.fileSize - s.originalSize)} bytes
               <ul>
-                <li>CMS SignedData (DER) — {fmt(s.fileSize - s.originalSize - 16)} bytes ← 아래 라벨 구조</li>
-                <li>DER 길이 (uint64 BE) — 8 bytes = {fmt(s.fileSize - s.originalSize - 16)}</li>
+                <li>서명 데이터 — {fmt(s.fileSize - s.originalSize - 16)} bytes ← 아래 라벨 구조</li>
+                <li>서명 데이터 길이 — 8 bytes = {fmt(s.fileSize - s.originalSize - 16)}</li>
                 <li>매직 "LMLABEL1" — 8 bytes</li>
               </ul>
             </li>
@@ -132,7 +134,7 @@ function FileLayout({ s }) {
       </li>
       {!s.embedded && s.sidecarName && (
         <li>
-          🏷 <b>{s.sidecarName}</b> ({fmt(s.derBytes.length)} bytes) — CMS SignedData (DER), 아래 라벨 구조
+          🏷 <b>{s.sidecarName}</b> ({fmt(s.derBytes.length)} bytes) — 서명 데이터, 아래 라벨 구조
         </li>
       )}
       {!s.derBytes && <li className="hint">라벨 없음 — 원장 폴백 검증만 수행됨</li>}
@@ -141,7 +143,7 @@ function FileLayout({ s }) {
 }
 
 // ── 서명·키 가시화 ──────────────────────────────────────────
-// 개인키는 서버 키스토어(softhsm/KCMVP 모듈) 밖으로 절대 나오지 않는다 —
+// 개인키는 서버 키스토어 밖으로 절대 나오지 않는다 —
 // 여기서는 "존재와 위치"만 표시한다. 검증 공개키는 라벨에 동봉된
 // 서명자 인증서에서 추출해 실물을 보여준다.
 
@@ -196,15 +198,15 @@ function KeyChainView({ derBytes, trust }) {
       <div className="keybox signer">
         <div className="keybox-title">② 라벨 서명자 인증서 — {info.subject} <span className="hint">(라벨에 동봉됨)</span></div>
         <div className="keybox-body">
-          <span className="keytag public">🔓 검증 공개키 (ECDSA P-256, {info.pubKeyLen} bytes)</span>
+          <span className="keytag public">🔓 검증 공개키 (타원곡선 전자서명, {info.pubKeyLen} bytes)</span>
           <div className="mono">04‖X‖Y = {info.pubKeyHex}</div>
           <div className="mono">serial 0x{info.serial} · 유효 {info.notBefore} ~ {info.notAfter} (90일 주기 교체)</div>
-          <span className="keytag private">🔒 서명용 개인키: 서버 키스토어(softhsm/KCMVP)에만 존재 — 라벨·네트워크로 반출되지 않음</span>
+          <span className="keytag private">🔒 서명용 개인키: 서버 키스토어에만 존재 — 라벨·네트워크로 반출되지 않음</span>
         </div>
       </div>
-      <div className="keyarrow">│ 개인키로 signedAttributes 서명 ↓</div>
+      <div className="keyarrow">│ 개인키로 서명 대상 속성 서명 ↓</div>
       <div className="keybox sig">
-        <div className="keybox-title">③ 이 라벨의 ECDSA 서명값</div>
+        <div className="keybox-title">③ 이 라벨의 전자서명값</div>
         <div className="keybox-body">
           <div className="mono">{info.sigHex}</div>
           <span className="hint">검증기는 ②의 공개키만으로 이 서명을 확인한다 — 개인키 불필요</span>
@@ -214,7 +216,7 @@ function KeyChainView({ derBytes, trust }) {
   )
 }
 
-// 라벨 필드 해석 표 (signedAttributes를 사람이 읽는 형태로)
+// 라벨 필드 해석 표 (서명 대상 속성을 사람이 읽는 형태로)
 function LabelFields({ label }) {
   if (!label) return null
   const rows = [
@@ -284,7 +286,7 @@ export default function StructureView({ structure }) {
 
           {structure.label && (
             <>
-              <h3 className="sv-h">2. 라벨 필드 (signedAttributes 해석 — 전부 평문·서명 대상)</h3>
+              <h3 className="sv-h">2. 라벨 필드 (서명 대상 속성 — 전부 평문·서명 대상)</h3>
               <div className="tablewrap"><LabelFields label={structure.label} /></div>
             </>
           )}
@@ -294,12 +296,12 @@ export default function StructureView({ structure }) {
               <h3 className="sv-h">3. 서명·키 가시화 — 개인키의 위치와 검증 공개키의 실물</h3>
               <KeyChainView derBytes={structure.derBytes} trust={trust} />
 
-              <h3 className="sv-h">4. 라벨 구조 — CMS SignedData (RFC 5652) ASN.1 트리</h3>
+              <h3 className="sv-h">4. 라벨 구조 (서명 데이터)</h3>
               <p className="hint">★ 표시는 LM 커스텀 속성. SEQUENCE/SET을 클릭해 펼치고 접을 수 있습니다.</p>
               <div className="a1tree">
                 {asn1Root
                   ? <Asn1Node node={asn1Root} depth={0} />
-                  : <p className="error">DER 파싱 실패 — 라벨이 손상되었을 수 있습니다</p>}
+                  : <p className="error">서명 데이터 파싱 실패 — 라벨이 손상되었을 수 있습니다</p>}
               </div>
             </>
           )}

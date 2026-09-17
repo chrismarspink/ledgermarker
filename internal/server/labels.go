@@ -50,7 +50,7 @@ type IssueRequest struct {
 	ApprovalToken string `json:"approvalToken,omitempty"`
 	// IssuerOrg: 발급기관 선택(예: KPOST, INNOTIUM). 빈 값이면 기본 기관.
 	IssuerOrg string `json:"issuerOrg,omitempty"`
-	// Sign: 서명 포함 여부. nil/true면 CMS 서명 라벨 생성, false면 원장
+	// Sign: 서명 포함 여부. nil/true면 서명 라벨 생성, false면 원장
 	// 등록만(라벨 서명 없음 — 검증 시 signature=absent).
 	Sign *bool `json:"sign,omitempty"`
 }
@@ -76,7 +76,7 @@ type LineageDecl struct {
 // IssueResponse 는 201 응답이다.
 type IssueResponse struct {
 	DocGUID   string        `json:"docGuid"`
-	LabelDER  string        `json:"labelDer"` // base64 CMS
+	LabelDER  string        `json:"labelData"` 
 	LedgerSeq int64         `json:"ledgerSeq"`
 	RootDocID string        `json:"rootDocId,omitempty"`
 	IssuedAt  time.Time     `json:"issuedAt"`
@@ -222,7 +222,7 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 	}
 	issue.EnsureFreshness(lbl, req.NotAfterDays)
 
-	// 서명 on/off: sign=false면 CMS 라벨을 만들지 않고 원장 등록만 한다
+	// 서명 on/off: sign=false면 서명 라벨을 만들지 않고 원장 등록만 한다
 	// (해시로 귀속·검증은 가능, 검증 시 signature=absent).
 	signed := req.Sign == nil || *req.Sign
 	var der []byte
@@ -426,7 +426,7 @@ func (s *Server) handleLabelByHash(w http.ResponseWriter, r *http.Request) {
 		"approvalState": matched.ApprovalState,
 		"issuerOrg":     matched.IssuerOrg,
 		"ledgerSeq":     matched.Seq,
-		"labelDer":      base64.StdEncoding.EncodeToString(matched.LabelDER),
+		"labelData":     base64.StdEncoding.EncodeToString(matched.LabelDER),
 		"revoked":       revoked,
 		"destroyed":     destroyed,
 	})

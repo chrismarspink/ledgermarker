@@ -18,7 +18,7 @@ import (
 // LM은 귀속만 답하고, 통과 여부는 호출자 정책이 정한다(불변식 4).
 func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		LabelDER    string `json:"labelDer,omitempty"` // 없으면 폴백 검증
+		LabelDER    string `json:"labelData,omitempty"` // 없으면 폴백 검증
 		ContentHash string `json:"contentHash"`        // 필수
 		TextHash    string `json:"textHash,omitempty"` // 2차 식별(재저장본 재식별)
 		Level       int    `json:"level,omitempty"`    // 1|2|3(Phase 2)
@@ -36,7 +36,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if req.LabelDER != "" {
 		labelDER, err = base64.StdEncoding.DecodeString(req.LabelDER)
 		if err != nil {
-			writeErr(w, http.StatusBadRequest, "labelDer must be base64")
+			writeErr(w, http.StatusBadRequest, "labelData must be base64")
 			return
 		}
 	}

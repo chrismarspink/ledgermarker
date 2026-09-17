@@ -62,7 +62,7 @@ function decodeValue(key, v) {
 // parseLabel 은 CMS DER(ArrayBuffer)에서 라벨 필드를 추출한다. 서명 검증 아님.
 export function parseLabel(der) {
   const asn1 = asn1js.fromBER(der)
-  if (asn1.offset === -1) throw new Error('DER 파싱 실패')
+  if (asn1.offset === -1) throw new Error('서명 데이터 파싱 실패')
   const ci = new ContentInfo({ schema: asn1.result })
   const sd = new SignedData({ schema: ci.content })
   const attrs = sd.signerInfos[0]?.signedAttrs?.attributes || []

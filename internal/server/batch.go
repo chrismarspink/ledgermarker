@@ -16,7 +16,7 @@ import (
 type batchItemResult struct {
 	ContentHash string `json:"contentHash"`
 	DocGUID     string `json:"docGuid,omitempty"`
-	LabelDER    string `json:"labelDer,omitempty"`
+	LabelDER    string `json:"labelData,omitempty"`
 	LedgerSeq   int64  `json:"ledgerSeq,omitempty"`
 	Error       string `json:"error,omitempty"`
 }

@@ -33,7 +33,7 @@ func New(baseURL, apiKey string) *Client {
 // ── 검증 (POST /v1/verify) ──────────────────────────────
 
 type VerifyRequest struct {
-	LabelDER    string `json:"labelDer,omitempty"` // base64. 없으면 폴백 검증
+	LabelDER    string `json:"labelData,omitempty"` // base64. 없으면 폴백 검증
 	ContentHash string `json:"contentHash"`        // hex SHA-256 — 필수
 	TextHash    string `json:"textHash,omitempty"` // 정규화 본문 텍스트 해시 (재저장본 재식별)
 	Level       int    `json:"level,omitempty"`    // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
@@ -124,7 +124,7 @@ type AttachResult struct {
 
 type IssueResponse struct {
 	DocGUID   string        `json:"docGuid"`
-	LabelDER  string        `json:"labelDer"`
+	LabelDER  string        `json:"labelData"`
 	LedgerSeq int64         `json:"ledgerSeq"`
 	RootDocID string        `json:"rootDocId,omitempty"`
 	IssuedAt  time.Time     `json:"issuedAt"`
@@ -196,7 +196,7 @@ type LabelInfo struct {
 	ApprovalState string `json:"approvalState"`
 	IssuerOrg     string `json:"issuerOrg"`
 	LedgerSeq     int64  `json:"ledgerSeq"`
-	LabelDER      string `json:"labelDer"` // base64
+	LabelDER      string `json:"labelData"` // base64
 	Revoked       bool   `json:"revoked"`
 	Destroyed     bool   `json:"destroyed"`
 }
@@ -346,7 +346,7 @@ func (c *Client) TrustImport(ctx context.Context, orgID, certPEM string) error {
 type BatchItemResult struct {
 	ContentHash string `json:"contentHash"`
 	DocGUID     string `json:"docGuid,omitempty"`
-	LabelDER    string `json:"labelDer,omitempty"`
+	LabelDER    string `json:"labelData,omitempty"`
 	LedgerSeq   int64  `json:"ledgerSeq,omitempty"`
 	Error       string `json:"error,omitempty"`
 }

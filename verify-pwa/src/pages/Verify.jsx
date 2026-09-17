@@ -151,7 +151,7 @@ async function runVerify(doc, sig) {
 
   try {
     const res = await api.verify({
-      labelDer: labelDerB64 || undefined,
+      labelData: labelDerB64 || undefined,
       contentHash,
       textHash: textHash || undefined, // 재저장본 2차 재식별
       level: 2
@@ -261,7 +261,7 @@ function RestoreLabel({ meta }) {
       if (info.destroyed) {
         throw new Error('파기된 문서입니다 — 라벨을 복원하지 않습니다. 사본이라면 회수 대상입니다.')
       }
-      const der = Uint8Array.from(atob(info.labelDer), (c) => c.charCodeAt(0))
+      const der = Uint8Array.from(atob(info.labelData), (c) => c.charCodeAt(0))
       setUrl(URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' })))
     } catch (e) {
       setError(e.message)
