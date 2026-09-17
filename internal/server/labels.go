@@ -334,6 +334,55 @@ func (s *Server) refreshFingerprint(ctx context.Context, docGUID uuid.UUID, minh
 	}
 }
 
+// handleReindex 는 문서의 지문 색인을 갱신한다 (POST /v1/reindex).
+// 지문 규칙(정규화·LSH)이 바뀐 뒤 예전 발급 문서를 재식별 가능하게 만든다.
+// 서버는 본문을 저장하지 않으므로(불변식 3) 클라이언트가 파일에서 계산한
+// contentHash·minhash를 보내면, 서버가 해시로 문서를 찾아 색인을 교체한다.
+func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ContentHash string `json:"contentHash"`       // hex SHA-256 (라벨 제외 본문)
+		MinHash     string `json:"minhash,omitempty"` // base64 MinHash (직접 제공)
+		Text        string `json:"text,omitempty"`    // 또는 본문 텍스트(서버가 지문 계산)
+	}
+	if err := readJSON(r, &req); err != nil || (req.MinHash == "" && req.Text == "") {
+		writeErr(w, http.StatusBadRequest, "contentHash and (minhash or text) are required")
+		return
+	}
+	// 텍스트가 오면 서버가 MinHash를 계산한다(브라우저 재구현 불요).
+	if req.MinHash == "" {
+		req.MinHash = base64.StdEncoding.EncodeToString(
+			fingerprint.Encode(fingerprint.FromText(req.Text)))
+	}
+	hash, err := hex.DecodeString(req.ContentHash)
+	if err != nil || len(hash) != 32 {
+		writeErr(w, http.StatusBadRequest, "contentHash must be 64 hex chars")
+		return
+	}
+	events, err := s.cfg.Store.EventsByContentHash(r.Context(), hash)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	var docGUID uuid.UUID
+	found := false
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type.IsIssuance() {
+			docGUID = events[i].DocGUID
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeErr(w, http.StatusNotFound, "이 해시의 문서가 원장에 없습니다 (먼저 발급 필요)")
+		return
+	}
+	s.refreshFingerprint(r.Context(), docGUID, req.MinHash)
+	s.log.Info("reindexed", "docGuid", docGUID)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"docGuid": docGUID.String(), "status": "reindexed",
+	})
+}
+
 // handleLabelByHash 는 해시로 라벨 원본을 회수한다 (GET /v1/labels/by-hash/{hash}).
 // 라벨 복원(재적용)의 구현체: 라벨이 유실된 파일도 원장에 보관된 label_der로
 // 이름표를 되살릴 수 있다 — "식별된 파일에 기존 보안정책 재적용" 시나리오.
