@@ -130,14 +130,18 @@ func TestT10_UpgradeImmediateOldSuperseded(t *testing.T) {
 	}
 }
 
-// T11: C등급 발급 요청 → 400 에러 (범위 밖).
-func TestT11_GradeCReturns400(t *testing.T) {
+// C(비밀)는 최상위 등급으로 정상 발급, 허용 목록 밖(X)은 400.
+func TestGradeValidation(t *testing.T) {
 	e := setup(t)
+	if _, err := e.c.IssueLabel(context.Background(),
+		gatesdk.IssueRequest{ContentHash: hashOf("gc"), Grade: "C"}, "gc"); err != nil {
+		t.Fatalf("grade C must succeed, got %v", err)
+	}
 	_, err := e.c.IssueLabel(context.Background(),
-		gatesdk.IssueRequest{ContentHash: hashOf("t11"), Grade: "C"}, "t11")
+		gatesdk.IssueRequest{ContentHash: hashOf("gx"), Grade: "X"}, "gx")
 	apiErr, ok := err.(*gatesdk.APIError)
 	if !ok || apiErr.StatusCode != http.StatusBadRequest {
-		t.Fatalf("want 400, got %v", err)
+		t.Fatalf("want 400 for invalid grade, got %v", err)
 	}
 }
 
@@ -259,7 +263,7 @@ func TestBatchScan(t *testing.T) {
 	items := []gatesdk.IssueRequest{
 		{ContentHash: hashOf("b1"), Grade: "O"},
 		{ContentHash: hashOf("b2"), Grade: "S"},
-		{ContentHash: hashOf("b3"), Grade: "C"}, // 실패해야 함
+		{ContentHash: hashOf("b3"), Grade: "X"}, // 허용 등급 밖 — 실패해야 함
 	}
 	jobID, err := e.c.BatchScan(context.Background(), items)
 	if err != nil {

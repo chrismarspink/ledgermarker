@@ -73,13 +73,17 @@ func TestBuildParseRoundTrip(t *testing.T) {
 	}
 }
 
-// T11: C등급 발급 요청은 에러 (범위 밖).
-func TestGradeCRejected(t *testing.T) {
+// C(비밀)는 최상위 등급으로 정상 발급된다. 허용 목록 밖(예: X)만 거부.
+func TestGradeCAccepted(t *testing.T) {
 	signer, _ := testSigner(t)
 	lbl := sampleLabel()
 	lbl.Grade = "C"
-	if _, err := issue.Build(context.Background(), signer, lbl); err != issue.ErrGradeC {
-		t.Fatalf("want ErrGradeC, got %v", err)
+	if _, err := issue.Build(context.Background(), signer, lbl); err != nil {
+		t.Fatalf("grade C must be accepted, got %v", err)
+	}
+	lbl.Grade = "X"
+	if _, err := issue.Build(context.Background(), signer, lbl); err != issue.ErrBadGrade {
+		t.Fatalf("want ErrBadGrade for invalid grade, got %v", err)
 	}
 }
 

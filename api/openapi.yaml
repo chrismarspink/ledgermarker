@@ -26,7 +26,7 @@ components:
       properties:
         docGuid: { type: string, format: uuid, description: 없으면 서버가 생성 }
         contentHash: { type: string, description: hex SHA-256 (64자) }
-        grade: { type: string, enum: [S, O], description: C는 400 — 체계 범위 밖 }
+        grade: { type: string, enum: [C, S, O], description: 'N2SF 등급 — C(비밀)>S(민감)>O(공개)' }
         basisClause: { type: integer, minimum: 1, maximum: 8, description: 정보공개법 9조 호수 }
         basisKeywords: { type: array, items: { type: string } }
         brmPath: { type: string }
@@ -134,7 +134,7 @@ paths:
           description: 발급 완료
           content: { application/json: { schema: { $ref: '#/components/schemas/IssueResponse' } } }
         "400":
-          description: 잘못된 요청 (C등급 포함 — 범위 밖)
+          description: 잘못된 요청 (허용 등급 C/S/O 밖 등)
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   /labels/{docGuid}/revoke:
     post:
@@ -166,7 +166,7 @@ paths:
               type: object
               required: [grade]
               properties:
-                grade: { type: string, enum: [S, O] }
+                grade: { type: string, enum: [C, S, O] }
                 approvalToken: { type: string, description: 하향 시 필수 }
                 reason: { type: string }
       responses:

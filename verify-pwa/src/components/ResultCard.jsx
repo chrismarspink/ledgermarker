@@ -54,7 +54,7 @@ export default function ResultCard({ result }) {
       </div>
 
       <div className="attribution">
-        <div className={`grade ${grade === 'S' || grade === 'O' ? grade : 'unknown'}`}>{grade}</div>
+        <div className={`grade ${['C', 'S', 'O'].includes(grade) ? grade : 'unknown'}`}>{grade}</div>
         {attribution.issuerOrg && (
           <img className="org-logo" src={orgLogo(attribution.issuerOrg)}
             alt={orgLabel(attribution.issuerOrg)} title={orgLabel(attribution.issuerOrg)} />

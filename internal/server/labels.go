@@ -141,7 +141,7 @@ func (s *Server) handleIssue(w http.ResponseWriter, r *http.Request) {
 // issueLabel 은 발급 공통 경로다(단건·regrade·배치 공용).
 func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string) (*IssueResponse, int, error) {
 	if err := issue.ValidateGrade(req.Grade); err != nil {
-		return nil, http.StatusBadRequest, err // C등급은 400 — 범위 밖 (T11)
+		return nil, http.StatusBadRequest, err // 허용 등급(C/S/O) 밖이면 400
 	}
 	contentHash, err := hex.DecodeString(req.ContentHash)
 	if err != nil || len(contentHash) != 32 {
@@ -231,14 +231,14 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		var err error
 		der, err = issue.Build(ctx, iss.LabelSigner, lbl)
 		if err != nil {
-			if errors.Is(err, issue.ErrGradeC) || errors.Is(err, issue.ErrBadGrade) {
+			if errors.Is(err, issue.ErrBadGrade) {
 				return nil, http.StatusBadRequest, err
 			}
 			return nil, http.StatusInternalServerError, fmt.Errorf("build label: %w", err)
 		}
 		signerSN = iss.LabelSigner.SerialNumber()
 	} else {
-		// 미서명이라도 등급 유효성은 검사한다 (C 거부).
+		// 미서명이라도 등급 유효성은 검사한다 (C/S/O 외 거부).
 		if err := issue.ValidateGrade(req.Grade); err != nil {
 			return nil, http.StatusBadRequest, err
 		}
@@ -559,10 +559,12 @@ func (s *Server) handleDestroy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// gradeRank: 민감도 순서. 하향(S→O)은 승인 토큰 필수 (T9),
-// 상향(O→S)은 즉시 처리 + 구 라벨 superseded (T10).
+// gradeRank: N2SF 민감도 순서 C(비밀) > S(민감) > O(공개). 하향은 승인 토큰
+// 필수 (T9), 상향은 즉시 처리 + 구 라벨 superseded (T10).
 func gradeRank(g string) int {
 	switch g {
+	case "C":
+		return 3
 	case "S":
 		return 2
 	case "O":

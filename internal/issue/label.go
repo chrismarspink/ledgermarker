@@ -46,16 +46,13 @@ const (
 	ApprovalConfirmed   = 1
 )
 
-// ErrGradeC: C등급은 이 체계의 범위 밖이다. 발급하지 않고 에러 반환 (DEV SPEC §4.2, T11).
-var ErrGradeC = errors.New("issue: grade C is out of scope; label not issued")
-
-// ErrBadGrade: 허용 등급은 S/O 뿐이다.
-var ErrBadGrade = errors.New("issue: grade must be 'S' or 'O'")
+// ErrBadGrade: 허용 등급은 C/S/O 뿐이다 (N2SF).
+var ErrBadGrade = errors.New("issue: grade must be 'C', 'S', or 'O'")
 
 // Label 은 라벨 필드(signedAttributes 커스텀 속성)다 (DEV SPEC §4.2).
 type Label struct {
 	ProfileVersion      int       `json:"profileVersion"`
-	Grade               string    `json:"grade"` // "S" | "O" ("C"는 발급 거부)
+	Grade               string    `json:"grade"` // "C"(비밀) | "S"(민감) | "O"(공개) — N2SF
 	BasisClause         int       `json:"basisClause,omitempty"`
 	BasisKeywords       []string  `json:"basisKeywords,omitempty"`
 	BRMPath             string    `json:"brmPath,omitempty"`
@@ -84,10 +81,8 @@ func (l *Label) ApprovalStateString() string {
 // ValidateGrade 는 발급 가능 등급인지 검사한다.
 func ValidateGrade(grade string) error {
 	switch grade {
-	case "S", "O":
+	case "C", "S", "O":
 		return nil
-	case "C":
-		return ErrGradeC
 	default:
 		return ErrBadGrade
 	}

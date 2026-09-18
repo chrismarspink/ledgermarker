@@ -152,6 +152,7 @@ export default function IssuePage() {
         <div className="fields">
           <label>등급
             <select value={form.grade} onChange={set('grade')}>
+              <option value="C">C — 비밀(최상위)</option>
               <option value="S">S — 민감(비공개)</option>
               <option value="O">O — 공개</option>
             </select>
@@ -366,6 +367,7 @@ function LifecycleSection({ apiKey }) {
                 <p>
                   새 등급:{' '}
                   <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
+                    <option value="C">C — 비밀</option>
                     <option value="S">S — 민감</option>
                     <option value="O">O — 공개</option>
                   </select>
@@ -402,4 +404,4 @@ function LifecycleSection({ apiKey }) {
   )
 }
 
-function gradeRankJS(g) { return g === 'S' ? 2 : g === 'O' ? 1 : 0 }
+function gradeRankJS(g) { return g === 'C' ? 3 : g === 'S' ? 2 : g === 'O' ? 1 : 0 }

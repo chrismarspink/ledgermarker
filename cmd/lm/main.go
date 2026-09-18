@@ -298,7 +298,7 @@ func cmdIssue() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVar(&req.Grade, "grade", "O", "등급 (S|O — C는 체계 범위 밖)")
+	c.Flags().StringVar(&req.Grade, "grade", "O", "등급 (C|S|O — N2SF, C가 최상위 비밀)")
 	c.Flags().IntVar(&req.BasisClause, "basis-clause", 0, "정보공개법 9조 호수 (1~8)")
 	c.Flags().StringSliceVar(&req.BasisKeywords, "keyword", nil, "판정 근거 키워드 (반복 지정 가능)")
 	c.Flags().StringVar(&req.BRMPath, "brm", "", "업무 분류 경로")
