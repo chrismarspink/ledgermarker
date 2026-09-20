@@ -1,6 +1,7 @@
 import React from 'react'
 import { api } from '../lib/api.js'
-import { analyzeFile, buildEmbedded, zipAttach } from '../lib/attach.js'
+import { analyzeFile, buildEmbedded, zipAttach, extractTextForIdentify } from '../lib/attach.js'
+import { minhashB64 } from '../lib/fingerprint.js'
 import { orgLabel } from '../lib/orgs.js'
 import { METHOD_KO } from './Help.jsx'
 import { Link } from 'react-router-dom'
@@ -77,6 +78,13 @@ export default function IssuePage() {
       if (form.issuerOrg) payload.issuerOrg = form.issuerOrg
       if (!form.sign) payload.sign = false
       if (analysis.textHash) payload.textHash = analysis.textHash
+      // 내용 유사도 지문 색인 — 수정본·변환본 재식별(identify)·복원(rehydrate)의
+      // 후보가 된다. 본문은 전송하지 않고 브라우저에서 지문만 계산해 제출한다
+      // (Go fingerprint 와 바이트 동일한 미러). 추출 가능한 텍스트 형식만.
+      try {
+        const idText = await extractTextForIdentify(file.name, buf)
+        if (idText) payload.fingerprint = { minhash: minhashB64(idText) }
+      } catch { /* 지문 실패해도 발급은 유효 */ }
       if (form.basisClause) payload.basisClause = Number(form.basisClause)
       if (form.keywords.trim()) {
         payload.basisKeywords = form.keywords.split(',').map((s) => s.trim()).filter(Boolean)
@@ -124,7 +132,7 @@ export default function IssuePage() {
         {file
           ? <p><b>{file.name}</b> ({(file.size / 1024).toFixed(1)} KB)</p>
           : <p><b>라벨을 붙일 파일을 끌어다 놓으세요</b></p>}
-        <p className="hint">파일 본문은 서버로 전송되지 않습니다 — 해시만 전송, 라벨은 브라우저에서 내장</p>
+        <p className="hint">파일 본문은 서버로 전송되지 않습니다 — 해시·지문(단방향)만 전송, 라벨은 브라우저에서 내장</p>
         <input ref={fileRef} type="file" hidden onChange={(e) => { setFile(e.target.files[0]); setDone(null) }} />
       </div>
 
