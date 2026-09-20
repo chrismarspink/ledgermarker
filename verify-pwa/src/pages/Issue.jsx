@@ -22,11 +22,19 @@ export default function IssuePage() {
     issuerOrg: '', sign: true
   })
   const [issuers, setIssuers] = React.useState([])
+  const [issuersErr, setIssuersErr] = React.useState(false)
   const [apiKey, setApiKey] = React.useState(localStorage.getItem('lm-api-key') || '')
 
-  React.useEffect(() => {
-    api.keys().then((k) => setIssuers(k.issuers || [])).catch(() => {})
+  // 발급기관 목록 로드. 실패를 조용히 삼키면 드롭다운이 '기본 기관'만
+  // 남아 사용자가 다른 기관(예: 이노티움)을 못 고르고 기본 기관으로 발급된다 —
+  // 실패를 노출하고 재시도할 수 있게 한다.
+  const loadIssuers = React.useCallback(() => {
+    setIssuersErr(false)
+    api.keys()
+      .then((k) => setIssuers(k.issuers || []))
+      .catch(() => setIssuersErr(true))
   }, [])
+  React.useEffect(() => { loadIssuers() }, [loadIssuers])
   const fileRef = React.useRef()
   const parentRef = React.useRef()
 
@@ -148,6 +156,13 @@ export default function IssuePage() {
                 </option>
               ))}
             </select>
+            {issuersErr && (
+              <span className="error" style={{ display: 'block', marginTop: 4 }}>
+                발급기관 목록을 불러오지 못했습니다 — 서버 연결을 확인하세요.{' '}
+                <button type="button" onClick={loadIssuers}>다시 시도</button>
+                <br />목록이 비면 다른 기관을 선택할 수 없어 <b>기본 기관</b>으로 발급됩니다.
+              </span>
+            )}
           </label>
           <label>서명
             <select value={form.sign ? '1' : '0'} onChange={(e) => setForm({ ...form, sign: e.target.value === '1' })}>
