@@ -34,9 +34,9 @@ func New(baseURL, apiKey string) *Client {
 
 type VerifyRequest struct {
 	LabelDER    string `json:"labelData,omitempty"` // base64. 없으면 폴백 검증
-	ContentHash string `json:"contentHash"`        // hex SHA-256 — 필수
-	TextHash    string `json:"textHash,omitempty"` // 정규화 본문 텍스트 해시 (재저장본 재식별)
-	Level       int    `json:"level,omitempty"`    // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
+	ContentHash string `json:"contentHash"`         // hex SHA-256 — 필수
+	TextHash    string `json:"textHash,omitempty"`  // 정규화 본문 텍스트 해시 (재저장본 재식별)
+	Level       int    `json:"level,omitempty"`     // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
 }
 
 type Attribution struct {
@@ -187,6 +187,46 @@ func (c *Client) Identify(ctx context.Context, minhashB64 string, limit int) ([]
 		return nil, err
 	}
 	return out.Candidates, nil
+}
+
+// RestoreRequest 는 유출·변형된 파일의 정체성 복원 요청이다.
+type RestoreRequest struct {
+	ContentHash   string  `json:"contentHash"`             // 파일 자신의 해시 (필수)
+	TextHash      string  `json:"textHash,omitempty"`      // 정규화 본문 텍스트 해시 (2차 식별)
+	MinHash       string  `json:"minhash,omitempty"`       // base64 지문 (유사도 재식별)
+	MinSimilarity float64 `json:"minSimilarity,omitempty"` // 후보 하한(기본 0.3)
+	Apply         bool    `json:"apply,omitempty"`         // true → 유사도 충분 시 상속 라벨 발급
+	IssuerOrg     string  `json:"issuerOrg,omitempty"`
+}
+
+// RestoreResult 는 복원 결과다. Mode 로 어떤 경로로 되살아났는지 구분한다:
+// exact(무수정 사본)·text(재저장·변환본)·inherited(수정본 상속 복원)·
+// review(사람 확인 필요)·not_found.
+type RestoreResult struct {
+	Mode              string              `json:"mode"`
+	DocGUID           string              `json:"docGuid,omitempty"`
+	Grade             string              `json:"grade,omitempty"`
+	RootDocID         string              `json:"rootDocId,omitempty"`
+	LedgerSeq         int64               `json:"ledgerSeq,omitempty"`
+	LabelDER          string              `json:"labelData,omitempty"`
+	Similarity        float64             `json:"similarity,omitempty"`
+	ParentDocGUID     string              `json:"parentDocGuid,omitempty"`
+	ParentContentHash string              `json:"parentContentHash,omitempty"`
+	Revoked           bool                `json:"revoked,omitempty"`
+	Destroyed         bool                `json:"destroyed,omitempty"`
+	Candidates        []IdentifyCandidate `json:"candidates,omitempty"`
+	Reasons           []string            `json:"reasons,omitempty"`
+}
+
+// Restore 는 저항 사다리(해시→텍스트해시→지문)를 한 호출로 엮어 파일 정체성을
+// 되살린다. Apply=true면 유사도가 충분한 수정본에 원본 귀속을 상속한 새 라벨을
+// 발급한다(재수화). 발급이 일어나므로 API 키가 필요하다.
+func (c *Client) Restore(ctx context.Context, req RestoreRequest) (*RestoreResult, error) {
+	var out RestoreResult
+	if err := c.do(ctx, http.MethodPost, "/v1/restore", "", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // LabelInfo 는 해시로 회수한 라벨 원본이다 (라벨 복원용).

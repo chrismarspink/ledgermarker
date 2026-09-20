@@ -473,6 +473,7 @@ func summarizeDocsim(out []byte) string {
 
 func cmdRestore() *cobra.Command {
 	var embed bool
+	var rehydrate bool
 	c := &cobra.Command{
 		Use:   "restore <파일>",
 		Short: "라벨 복원 — 원장에서 라벨 원본을 회수해 재부착 (기본: .lmsig 사이드카)",
@@ -500,7 +501,13 @@ func cmdRestore() *cobra.Command {
 					}
 				}
 				if err != nil {
-					return fmt.Errorf("원장 조회 실패 — 정확 일치 기록이 없으면 lm identify 로 유사 문서를 찾아보세요: %w", err)
+					// 정확·텍스트 해시 모두 미등록 → 수정본이다.
+					// --rehydrate: 지문으로 유사 원본을 식별해 귀속(File ID·등급·태그)을
+					// 상속한 새 라벨을 발급·부착한다(재수화).
+					if rehydrate {
+						return runRehydrate(path, data, hash, attacher, res, embed)
+					}
+					return fmt.Errorf("원장에 정확·텍스트 해시 기록이 없습니다(수정본으로 보입니다) — 유사 원본 상속 복원은 lm restore %s --rehydrate, 후보 확인은 lm identify %s: %w", path, path, err)
 				}
 			}
 			if info.Destroyed {
@@ -537,7 +544,59 @@ func cmdRestore() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&embed, "embed", false, "사이드카 대신 파일 안에 재내장 (형식이 지원할 때)")
+	c.Flags().BoolVar(&rehydrate, "rehydrate", false, "정확·텍스트 해시가 없으면 지문으로 유사 원본을 찾아 귀속을 상속 복원(재수화)")
 	return c
+}
+
+// runRehydrate 는 수정본의 정체성을 되살린다: 지문으로 유사 원본을 식별해
+// File ID 계보·등급·태그를 상속한 새 서명 라벨을 발급받아(서버 /restore)
+// 파일에 부착한다. 원본 라벨을 그대로 재부착하면 해시 불일치로 서명이
+// 깨지므로, 수정본 자신의 해시에 결속된 새 라벨이 필요하다.
+func runRehydrate(path string, data []byte, hash string, attacher attach.Attacher, res attach.Resolution, embed bool) error {
+	mh := fingerprintB64(path, data)
+	if mh == "" {
+		return fmt.Errorf("이 형식은 지문 추출을 지원하지 않아 재수화할 수 없습니다 (지원: txt·md·docx·pdf 등)")
+	}
+	rr, err := client().Restore(context.Background(), gatesdk.RestoreRequest{
+		ContentHash: hash, TextHash: textHashHex(path, data), MinHash: mh, Apply: true,
+	})
+	if err != nil {
+		return err
+	}
+	switch rr.Mode {
+	case "inherited":
+		der, err := base64.StdEncoding.DecodeString(rr.LabelDER)
+		if err != nil {
+			return fmt.Errorf("라벨 디코드: %w", err)
+		}
+		fmt.Printf("재수화(상속 복원) 완료 — 유사도 %.0f%%\n", rr.Similarity*100)
+		fmt.Printf("  원본 File ID docGuid=%s → 상속 등급=%s\n", rr.ParentDocGUID, rr.Grade)
+		fmt.Printf("  새 파생 File ID docGuid=%s rootDocId=%s (원장 seq %d)\n", rr.DocGUID, rr.RootDocID, rr.LedgerSeq)
+		if embed && (res.Method == attach.MethodEmbedded || res.Method == attach.MethodContainer) {
+			var out bytes.Buffer
+			if err := attacher.Attach(bytes.NewReader(data), &out, der); err == nil {
+				if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+					return fmt.Errorf("파일 쓰기: %w", err)
+				}
+				fmt.Printf("  라벨 파일에 내장: %s\n", path)
+				return nil
+			}
+			fmt.Println("  내장 실패 — 사이드카로 복원합니다")
+		}
+		if err := writeSidecar(path, rr.LabelDER); err != nil {
+			return fmt.Errorf("사이드카 쓰기: %w", err)
+		}
+		fmt.Printf("  라벨 사이드카 복원: %s%s\n", path, sidecarExt)
+		return nil
+	case "review":
+		fmt.Printf("유사 후보를 찾았으나 자동 복원 임계치 미만입니다 (최고 유사도 %.0f%%)\n", rr.Similarity*100)
+		for i, c := range rr.Candidates {
+			fmt.Printf("  %d. 유사도 %.0f%%  docGuid=%s  등급=%s\n", i+1, c.Similarity*100, c.DocGUID, c.Grade)
+		}
+		return fmt.Errorf("운영자 확인 후 계보 확정: lm issue %s --grade <등급> --parent <원본해시> --transform edit", path)
+	default:
+		return fmt.Errorf("유사 원본을 찾지 못했습니다 (재수화 불가)")
+	}
 }
 
 // ── lm scan ./문서고 --issue --recursive --grade O ─────────

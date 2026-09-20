@@ -233,6 +233,38 @@ paths:
                 minSimilarity: { type: number, default: 0.3 }
       responses:
         "200": { description: "candidates[] (docGuid·similarity·grade·docsimFp 등, 유사도 내림차순)" }
+  /restore:
+    post:
+      summary: 정체성 복원(재수화) — 저항 사다리(해시→텍스트해시→지문)를 한 호출로
+      description: |
+        유출·변형된 파일의 정체성을 되살린다.
+        - content hash 일치 → 원본 서명 라벨 회수 (mode=exact)
+        - text hash 일치 → 재저장·형식 변환본의 원본 라벨 회수 (mode=text)
+        - 지문 유사도 → 원본 후보 식별 (mode=review); apply=true & 유사도 충분 시
+          원본 귀속(File ID 계보·등급·태그)을 상속한 새 라벨 발급 (mode=inherited)
+
+        exact·text는 원본 라벨을 그대로 되살린다. inherited는 수정본 자신의 해시에
+        결속된 새 서명 라벨을 발급하되 원본 귀속을 승계한다 — 수정본에 원본 라벨을
+        재부착하면 해시 불일치로 서명이 깨지기 때문이다. 본문 자체는 저장·복원하지
+        않는다(불변식 3) — 되살아난 File ID로 ECM 정본을 회수하는 것은 호출자 몫.
+      security: [{ ApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contentHash]
+              properties:
+                contentHash: { type: string, description: 파일 자신의 hex SHA-256 (필수) }
+                textHash: { type: string, description: 정규화 본문 텍스트 해시 (2차 식별) }
+                minhash: { type: string, description: base64 지문 — 유사도 재식별 }
+                minSimilarity: { type: number, default: 0.3 }
+                apply: { type: boolean, default: false, description: true면 유사도 충분 시 상속 라벨 발급 }
+                issuerOrg: { type: string }
+      responses:
+        "200": { description: "{mode: exact|text|review|not_found, docGuid, grade, labelData, similarity, parentDocGuid, ...}" }
+        "201": { description: "상속 복원 완료 (mode=inherited) — 새 파생 라벨 발급" }
   /labels/by-hash/{hash}:
     get:
       summary: 라벨 원본 회수 (복원·정책 재적용) — 공개 조회

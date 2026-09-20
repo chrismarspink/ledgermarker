@@ -64,6 +64,78 @@ func (e *env) issue(t *testing.T, content, grade, idem string) *gatesdk.IssueRes
 	return resp
 }
 
+// 재수화(rehydrate) 3모드: exact(무수정)·text(재저장)·inherited(수정본 상속 복원).
+func TestRestoreModes(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+
+	orig := "제1조(목적) 이 규정은 문서의 보안등급 분류와 취급에 관한 사항을 정함을 목적으로 한다. " +
+		"제2조(정의) 이 규정에서 사용하는 용어의 뜻은 다음과 같다. 비밀이란 국가안전보장에 관련되는 사항을 말한다. " +
+		"제3조(등급) 보안등급은 비밀·민감·공개의 세 단계로 구분한다. " +
+		"제4조(취급) 각급 기관의 장은 문서의 보안등급에 따라 열람·복제·반출을 통제하여야 한다."
+	textHash := func(s string) string {
+		th, _ := fingerprint.TextHash("x.txt", []byte(s))
+		return hex.EncodeToString(th)
+	}
+	mh := func(s string) string {
+		return base64.StdEncoding.EncodeToString(fingerprint.Encode(fingerprint.FromText(s)))
+	}
+	// 원본 발급 (지문·텍스트해시 색인 포함, 등급 S)
+	origResp, err := e.c.IssueLabel(ctx, gatesdk.IssueRequest{
+		ContentHash: hashOf(orig), Grade: "S", BasisKeywords: []string{"인사", "대외비"},
+		TextHash: textHash(orig), Fingerprint: &gatesdk.FingerprintDecl{MinHash: mh(orig)},
+	}, "orig")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1) exact — 원본 해시 그대로
+	r1, err := e.c.Restore(ctx, gatesdk.RestoreRequest{ContentHash: hashOf(orig)})
+	if err != nil || r1.Mode != "exact" || r1.DocGUID != origResp.DocGUID {
+		t.Fatalf("exact 실패: %+v (err %v)", r1, err)
+	}
+
+	// 2) text — 재저장본(바이트 다름, 텍스트 동일): 원시 해시 미등록 + 텍스트 해시 일치
+	r2, err := e.c.Restore(ctx, gatesdk.RestoreRequest{
+		ContentHash: hashOf("재저장-다른바이트"), TextHash: textHash(orig)})
+	if err != nil || r2.Mode != "text" || r2.DocGUID != origResp.DocGUID {
+		t.Fatalf("text 실패: %+v (err %v)", r2, err)
+	}
+
+	// 3) inherited — 수정본(유사도 높음): 조항 한 줄 추가
+	modified := orig + " 제5조(부칙) 이 규정은 공포한 날부터 시행한다."
+	r3, err := e.c.Restore(ctx, gatesdk.RestoreRequest{
+		ContentHash: hashOf(modified), TextHash: textHash(modified),
+		MinHash: mh(modified), Apply: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r3.Mode != "inherited" {
+		t.Fatalf("inherited 기대, got %+v", r3)
+	}
+	if r3.Grade != "S" { // 등급 상속
+		t.Fatalf("등급 상속 실패: %s", r3.Grade)
+	}
+	if r3.ParentDocGUID != origResp.DocGUID {
+		t.Fatalf("부모 귀속 실패: parent=%s want=%s", r3.ParentDocGUID, origResp.DocGUID)
+	}
+	if r3.RootDocID != origResp.DocGUID { // 원본이 root
+		t.Fatalf("rootDocId 상속 실패: %s want %s", r3.RootDocID, origResp.DocGUID)
+	}
+	if r3.DocGUID == origResp.DocGUID {
+		t.Fatal("수정본은 새 File ID(자식)여야 한다")
+	}
+	// 수정본 자신의 해시로 검증하면 등록·유효 서명이어야 한다
+	v, err := e.c.Verify(ctx, gatesdk.VerifyRequest{
+		LabelDER: r3.LabelDER, ContentHash: hashOf(modified), Level: 2})
+	if err != nil || v.Checks.Signature != "valid" || v.Checks.Ledger != "registered" {
+		t.Fatalf("상속 라벨 검증 실패: %+v (err %v)", v.Checks, err)
+	}
+	if v.Attribution.Grade != "S" {
+		t.Fatalf("상속 라벨 등급 검증 실패: %s", v.Attribution.Grade)
+	}
+}
+
 func TestIssueAndVerifyEndToEnd(t *testing.T) {
 	e := setup(t)
 	resp := e.issue(t, "e2e-doc", "S", "k1")

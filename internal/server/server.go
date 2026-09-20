@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	// 비공개 (발급·운영)
 	mux.HandleFunc("POST /v1/labels", s.auth(s.handleIssue))
 	mux.HandleFunc("POST /v1/reindex", s.auth(s.handleReindex)) // 지문 색인 갱신
+	mux.HandleFunc("POST /v1/restore", s.auth(s.handleRestore)) // 유출·변형 파일 정체성 복원(재수화)
 	mux.HandleFunc("POST /v1/labels/{docGuid}/revoke", s.auth(s.handleRevoke))
 	mux.HandleFunc("POST /v1/labels/{docGuid}/regrade", s.auth(s.handleRegrade))
 	mux.HandleFunc("POST /v1/labels/{docGuid}/destroy", s.auth(s.handleDestroy))
