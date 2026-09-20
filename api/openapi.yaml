@@ -55,6 +55,7 @@ components:
         textHash: { type: string, description: 정규화 본문 텍스트 해시(hex) — 재저장 생존 2차 색인 }
         docsimFp: { type: string, description: 사내 docsim 정밀 지문(JSON, 원문 복원 불가) — identify --deep 용 }
         approvalToken: { type: string, description: 파생물을 부모보다 낮은 등급으로 발급 시 필수(상속 규칙) }
+        filename: { type: string, description: 원본 파일명 — 개발·운영 확인용 메타데이터(정체성·검증 무관) }
     IssueResponse:
       type: object
       properties:

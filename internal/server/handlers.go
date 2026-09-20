@@ -180,6 +180,7 @@ func (s *Server) handleLedgerEvents(w http.ResponseWriter, r *http.Request) {
 			"contentHash": hex.EncodeToString(e.ContentHash),
 			"grade":       e.Grade,
 			"issuerOrg":   e.IssuerOrg,
+			"filename":    e.Filename,
 			"actor":       e.Actor,
 			"rowHash":     hex.EncodeToString(e.RowHash),
 			"prevHash":    hex.EncodeToString(e.PrevHash),

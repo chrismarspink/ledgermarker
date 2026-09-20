@@ -106,6 +106,7 @@ type IssueRequest struct {
 	DocsimFp            string           `json:"docsimFp,omitempty"`      // docsim 정밀 지문 (선택)
 	ApprovalToken       string           `json:"approvalToken,omitempty"` // 파생물 하향 상속 승인
 	IssuerOrg           string           `json:"issuerOrg,omitempty"`     // 발급기관 선택
+	Filename            string           `json:"filename,omitempty"`      // 원본 파일명(확인용 메타)
 	Sign                *bool            `json:"sign,omitempty"`          // 서명 on/off (기본 on)
 }
 

@@ -50,7 +50,7 @@ export default function LedgerPage() {
           <div className="tablewrap">
             <table className="ledger">
               <thead>
-                <tr><th>seq</th><th>이벤트</th><th>등급</th><th>docGuid</th><th>contentHash (SHA-256)</th><th>actor</th><th>기록 시각(UTC)</th></tr>
+                <tr><th>seq</th><th>이벤트</th><th>등급</th><th>파일명</th><th>docGuid</th><th>contentHash (SHA-256)</th><th>actor</th><th>기록 시각(UTC)</th></tr>
               </thead>
               <tbody>
                 {[...ledger.events].reverse().map((e) => (
@@ -58,6 +58,7 @@ export default function LedgerPage() {
                     <td>{e.seq}</td>
                     <td>{e.eventType}{e.revokedRef ? ` →${e.revokedRef}` : ''}{e.transform ? ` ←${e.transform}` : ''}</td>
                     <td>{e.grade || '-'}</td>
+                    <td title={e.filename}>{e.filename || '-'}</td>
                     <td className="mono" title={e.docGuid}>{e.docGuid.slice(0, 8)}…</td>
                     <td className="mono" title={e.contentHash}>{e.contentHash.slice(0, 16)}…</td>
                     <td title={e.actor}>{e.actor.length > 16 ? e.actor.slice(0, 15) + '…' : e.actor}</td>

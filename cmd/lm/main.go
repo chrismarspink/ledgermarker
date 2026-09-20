@@ -181,6 +181,7 @@ func cmdIssue() *cobra.Command {
 				return fmt.Errorf("해시 대상 계산: %w", err)
 			}
 			req.ContentHash = hash
+			req.Filename = filepath.Base(path) // 확인용 메타(정체성 무관)
 			if noSign {
 				no := false
 				req.Sign = &no
@@ -636,6 +637,7 @@ func cmdScan() *cobra.Command {
 				}
 				req := gatesdk.IssueRequest{
 					ContentHash: hash, Grade: grade, NotAfterDays: notAfterDays,
+					Filename: filepath.Base(path),
 					// scan은 사이드카 일괄 부착 — 폴백 아님
 					Attach: &gatesdk.AttachDecl{Method: string(attach.MethodSidecar), FormatID: res.Format.ID},
 				}

@@ -60,7 +60,11 @@ type Event struct {
 	TextHash []byte
 	// DocsimFP: 사내 docsim 모듈의 정밀 지문(JSON, 원문 복원 불가) — 선택.
 	DocsimFP string
-	PrevHash       []byte
-	RowHash        []byte
-	CreatedAt      time.Time
+	// Filename: 발급 시 보고된 원본 파일명 — 개발·운영 확인용 주석성 메타데이터.
+	// 정체성·검증에는 쓰지 않으며(정체성은 ContentHash·지문), 행 해시에도
+	// 포함되지 않는다(AttachMethod 계열과 동일).
+	Filename  string
+	PrevHash  []byte
+	RowHash   []byte
+	CreatedAt time.Time
 }

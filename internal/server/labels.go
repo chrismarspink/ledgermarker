@@ -50,6 +50,8 @@ type IssueRequest struct {
 	ApprovalToken string `json:"approvalToken,omitempty"`
 	// IssuerOrg: 발급기관 선택(예: KPOST, INNOTIUM). 빈 값이면 기본 기관.
 	IssuerOrg string `json:"issuerOrg,omitempty"`
+	// Filename: 원본 파일명 — 개발·운영 확인용 주석성 메타데이터(정체성 무관).
+	Filename string `json:"filename,omitempty"`
 	// Sign: 서명 포함 여부. nil/true면 서명 라벨 생성, false면 원장
 	// 등록만(라벨 서명 없음 — 검증 시 signature=absent).
 	Sign *bool `json:"sign,omitempty"`
@@ -76,7 +78,7 @@ type LineageDecl struct {
 // IssueResponse 는 201 응답이다.
 type IssueResponse struct {
 	DocGUID   string        `json:"docGuid"`
-	LabelDER  string        `json:"labelData"` 
+	LabelDER  string        `json:"labelData"`
 	LedgerSeq int64         `json:"ledgerSeq"`
 	RootDocID string        `json:"rootDocId,omitempty"`
 	IssuedAt  time.Time     `json:"issuedAt"`
@@ -261,6 +263,7 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		SignerCertSN:  signerSN,
 		Actor:         actor,
 		DocsimFP:      req.DocsimFp,
+		Filename:      req.Filename,
 	}
 	if req.TextHash != "" {
 		if th, err := hex.DecodeString(req.TextHash); err == nil && len(th) == 32 {

@@ -81,6 +81,7 @@ export default function IssuePage() {
         grade: form.grade,
         approvalState: form.approvalState,
         notAfterDays: Number(form.notAfterDays) || 365,
+        filename: file.name, // 확인용 메타(정체성 무관)
         attach: { method, formatId: format.id, fallbackReason }
       }
       if (form.issuerOrg) payload.issuerOrg = form.issuerOrg
