@@ -301,7 +301,14 @@ function IdentifyPanel({ doc, autoOpen }) {
     try {
       const buf = await doc.arrayBuffer()
       const text = await extractTextForIdentify(doc.name, buf)
-      if (!text) { setState('unsupported'); return }
+      if (!text) {
+        // 텍스트 추출 대상 형식인데 빈 결과면 텍스트 레이어가 없는 것
+        // (스캔·이미지 PDF 등) — 형식 미지원과 구분한다.
+        const ext = doc.name.slice(doc.name.lastIndexOf('.')).toLowerCase()
+        const textExts = ['.txt', '.md', '.markdown', '.csv', '.log', '.docx', '.pptx', '.xlsx', '.hwpx', '.odt', '.ods', '.odp', '.pdf']
+        setState(textExts.includes(ext) ? 'notext' : 'unsupported')
+        return
+      }
       const res = await api.identify(null, text)
       setCands(res.candidates || [])
       setState('done')
@@ -320,8 +327,13 @@ function IdentifyPanel({ doc, autoOpen }) {
       </p>
       {state === 'idle' && <button className="primary" onClick={run}>유사 문서 찾기</button>}
       {state === 'busy' && <p>분석 중…</p>}
+      {state === 'notext' && (
+        <p className="hint">이 파일에서 추출할 본문 텍스트가 없습니다 — 텍스트 레이어가 없는 스캔·이미지 PDF로 보입니다.
+          텍스트 유사도는 본문 텍스트가 있어야 가능하며, 이런 파일은 OCR(향후 지원)이 필요합니다.
+          텍스트가 있는 원본(예: 원본 docx·pptx)이 있으면 그 파일로 검색하세요.</p>
+      )}
       {state === 'unsupported' && (
-        <p className="hint">이 형식은 웹에서 텍스트 추출을 지원하지 않습니다 — CLI: <code>lm identify {doc.name}</code></p>
+        <p className="hint">이 형식은 웹에서 텍스트 추출을 지원하지 않습니다 (지원: txt·md·csv·log·docx·pptx·xlsx·hwpx·odt·pdf) — CLI: <code>lm identify {doc.name}</code></p>
       )}
       {state === 'error' && <p className="error">{error}</p>}
       {state === 'done' && cands.length === 0 && (
