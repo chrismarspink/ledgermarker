@@ -41,6 +41,10 @@ export const api = {
   treaties: () => req('GET', '/v1/treaties'),
   formats: () => req('GET', '/v1/formats'),
   labelByHash: (hashHex) => req('GET', `/v1/labels/by-hash/${hashHex}`),
+  labelByTextHash: (hashHex) => req('GET', `/v1/labels/by-hash/${hashHex}?kind=text`),
+  // 정체성 복원(재수화): 해시→텍스트해시→지문 사다리를 한 번에. apply=true면
+  // 유사 수정본에 원본 귀속을 상속한 새 라벨을 발급(발급이므로 API 키 필요).
+  restore: (payload, apiKey) => req('POST', '/v1/restore', payload, apiKey),
   // 파일을 업로드하지 않는다 — 파일명과 앞 16바이트 매직넘버만 (§3.2)
   formatsResolve: (filename, magicHex) =>
     req('POST', '/v1/formats/resolve', { filename, magicHex }),

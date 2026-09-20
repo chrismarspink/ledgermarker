@@ -5,6 +5,7 @@ import { api, getTrustListCached } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
 import { extractEmbedded } from '../lib/embed.js'
 import { analyzeFile, extractTextForIdentify } from '../lib/attach.js'
+import { minhashB64 } from '../lib/fingerprint.js'
 import { orgLabel } from '../lib/orgs.js'
 import ResultCard from '../components/ResultCard.jsx'
 import StructureView from '../components/StructureView.jsx'
@@ -74,6 +75,9 @@ export default function VerifyPage() {
           )}
           {result.checks?.signature === 'absent' && result.checks?.ledger === 'registered' && (
             <RestoreLabel meta={result.meta} />
+          )}
+          {pair.doc && result.checks?.ledger === 'unregistered' && (
+            <RehydratePanel doc={pair.doc} />
           )}
           {pair.doc && (
             <IdentifyPanel doc={pair.doc}
@@ -257,7 +261,10 @@ function RestoreLabel({ meta }) {
   async function restore() {
     setError('')
     try {
-      const info = await api.labelByHash(meta.contentHash)
+      // 원시 해시(바이트 동일) → 없으면 텍스트 해시(재저장·형식변환본)
+      let info
+      try { info = await api.labelByHash(meta.contentHash) }
+      catch { if (meta.textHash) info = await api.labelByTextHash(meta.textHash); else throw new Error('원장에 라벨이 없습니다') }
       if (info.destroyed) {
         throw new Error('파기된 문서입니다 — 라벨을 복원하지 않습니다. 사본이라면 회수 대상입니다.')
       }
@@ -270,19 +277,105 @@ function RestoreLabel({ meta }) {
 
   return (
     <div className="card">
-      <h2>이름표 복원</h2>
+      <h2>완전 복원 — 원본과 동일</h2>
       <p className="hint">
-        이 파일은 이름표 없이 유통되고 있지만, 대장에 발급 기록과 라벨 원본이
-        보관되어 있습니다. 회수해서 다시 붙일 수 있습니다.
+        이 파일은 이름표가 없지만 <b>내용이 원본과 동일</b>(해시 일치)해, 대장에 보관된
+        <b> 원본 서명 라벨을 그대로 회수</b>할 수 있습니다. 서명이 원본 그대로 살아납니다.
       </p>
       {!url ? (
-        <button className="primary" onClick={restore}>대장에서 이름표 회수</button>
+        <button className="primary" onClick={restore}>원본 라벨 회수</button>
       ) : (
         <a className="download" href={url} download={(meta.fileName || 'document') + '.lmsig'}>
           ⬇ 이름표 받기 — {meta.fileName}.lmsig (파일과 함께 두세요)
         </a>
       )}
       {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+
+// 상속 복원(재수화) — 원장에 정확·텍스트 해시가 없는 '수정본'을 위한 복원.
+// 원본 라벨을 그대로 붙이면 해시 불일치로 서명이 깨지므로, 지문으로 원본을
+// 식별해 File ID 계보·등급·태그를 상속한 '새' 서명 라벨을 발급한다(발급이라
+// API 키 필요). 완전 복원(RestoreLabel)과 명확히 구분된다.
+function RehydratePanel({ doc }) {
+  const [state, setState] = React.useState('idle') // idle|busy|done|review|notfound|error
+  const [res, setRes] = React.useState(null)
+  const [url, setUrl] = React.useState(null)
+  const [err, setErr] = React.useState('')
+  const [apiKey, setApiKey] = React.useState(localStorage.getItem('lm-api-key') || '')
+
+  async function run() {
+    setState('busy'); setErr('')
+    try {
+      localStorage.setItem('lm-api-key', apiKey)
+      const buf = await doc.arrayBuffer()
+      const analysis = await analyzeFile(doc.name, buf)
+      const text = await extractTextForIdentify(doc.name, buf)
+      if (!text) { setErr('이 형식은 텍스트 추출을 지원하지 않아 상속 복원을 할 수 없습니다 (스캔·이미지 PDF 등).'); setState('error'); return }
+      const out = await api.restore({
+        contentHash: analysis.contentHash,
+        textHash: analysis.textHash || undefined,
+        minhash: minhashB64(text),
+        apply: true
+      }, apiKey)
+      setRes(out)
+      if (out.mode === 'inherited') {
+        const der = Uint8Array.from(atob(out.labelData), (c) => c.charCodeAt(0))
+        setUrl(URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' })))
+        setState('done')
+      } else if (out.mode === 'exact' || out.mode === 'text') {
+        const der = Uint8Array.from(atob(out.labelData), (c) => c.charCodeAt(0))
+        setUrl(URL.createObjectURL(new Blob([der], { type: 'application/octet-stream' })))
+        setState('done')
+      } else if (out.mode === 'review') {
+        setState('review')
+      } else {
+        setState('notfound')
+      }
+    } catch (e) { setErr(e.message); setState('error') }
+  }
+
+  return (
+    <div className="card">
+      <h2>상속 복원(재수화) — 유사 원본에서</h2>
+      <p className="hint">
+        이 파일은 원장에 <b>정확 일치가 없는 수정본</b>입니다. 원본 라벨을 그대로 붙이면
+        서명이 깨지므로, 지문·의미로 <b>원본을 식별</b>해 File ID 계보·등급·태그를 상속한
+        <b> 새 서명 라벨</b>을 발급합니다(원본과 계보로 연결). 발급 동작이라 API 키가 필요하고,
+        이때 본문 텍스트가 서버로 전송됩니다.
+      </p>
+      {state === 'idle' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input type="password" placeholder="API 키" value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'inherit' }} />
+          <button className="primary" onClick={run}>유사 원본으로 상속 복원</button>
+        </div>
+      )}
+      {state === 'busy' && <p>원본 식별·상속 발급 중…</p>}
+      {state === 'review' && res && (
+        <p className="hint">
+          유사 원본 후보를 찾았지만 <b>자동 복원 임계치(70%) 미만</b>입니다 (최고 유사도 {Math.round((res.similarity || 0) * 100)}%).
+          오탐 방지를 위해 자동 발급하지 않았습니다 — 운영자 확인 후 계보를 확정하세요.
+        </p>
+      )}
+      {state === 'notfound' && <p className="hint">유사한 원본을 찾지 못했습니다 — 상속 복원 대상이 아닙니다.</p>}
+      {state === 'error' && <p className="error">{err}</p>}
+      {state === 'done' && res && (
+        <div>
+          <p style={{ margin: '0 0 8px' }}>
+            <b>상속 복원 완료</b> — 유사도 {Math.round((res.similarity || 0) * 100)}%,
+            원본 등급 <b>{res.grade}</b> 상속.
+            {res.parentDocGuid && <> 원본 File ID <code>{res.parentDocGuid.slice(0, 8)}…</code> → 새 파생 <code>{(res.docGuid || '').slice(0, 8)}…</code></>}
+          </p>
+          {url && (
+            <a className="download" href={url} download={(doc.name || 'document') + '.lmsig'}>
+              ⬇ 상속 라벨 받기 — {doc.name}.lmsig (파일과 함께 두세요)
+            </a>
+          )}
+        </div>
+      )}
     </div>
   )
 }
