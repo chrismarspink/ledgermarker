@@ -172,6 +172,7 @@ type IdentifyCandidate struct {
 	Grade         string  `json:"grade,omitempty"`
 	ApprovalState string  `json:"approvalState,omitempty"`
 	IssuerOrg     string  `json:"issuerOrg,omitempty"`
+	Filename      string  `json:"filename,omitempty"`
 	ContentHash   string  `json:"contentHash,omitempty"`
 	Revoked       bool    `json:"revoked"`
 	DocsimFp      string  `json:"docsimFp,omitempty"` // 정밀 비교용 (lm identify --deep)

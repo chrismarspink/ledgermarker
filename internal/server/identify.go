@@ -68,6 +68,7 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 		Grade         string  `json:"grade,omitempty"`
 		ApprovalState string  `json:"approvalState,omitempty"`
 		IssuerOrg     string  `json:"issuerOrg,omitempty"`
+		Filename      string  `json:"filename,omitempty"`
 		ContentHash   string  `json:"contentHash,omitempty"`
 		Revoked       bool    `json:"revoked"`
 		// DocsimFp: 발급 시 제출된 사내 docsim 정밀 지문 — 클라이언트가
@@ -91,6 +92,7 @@ func (s *Server) handleIdentify(w http.ResponseWriter, r *http.Request) {
 			c.Grade = latest.Grade
 			c.ApprovalState = latest.ApprovalState
 			c.IssuerOrg = latest.IssuerOrg
+			c.Filename = latest.Filename
 			c.ContentHash = hex.EncodeToString(latest.ContentHash)
 			c.Revoked = !latest.Type.IsIssuance()
 			c.DocsimFp = latest.DocsimFP

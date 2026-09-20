@@ -358,8 +358,12 @@ func cmdIdentify() *cobra.Command {
 				if cd.Revoked {
 					mark = " [폐기/파기됨]"
 				}
-				fmt.Printf("  %d. 유사도 %.0f%%  docGuid=%s  등급=%s %s%s\n",
-					i+1, cd.Similarity*100, cd.DocGUID, cd.Grade, cd.IssuerOrg, mark)
+				name := cd.Filename
+				if name == "" {
+					name = "(파일명 없음)"
+				}
+				fmt.Printf("  %d. 유사도 %.0f%%  %s  등급=%s  docGuid=%s %s%s\n",
+					i+1, cd.Similarity*100, name, cd.Grade, cd.DocGUID, cd.IssuerOrg, mark)
 			}
 			if deep {
 				if err := deepCompare(path, cands); err != nil {
