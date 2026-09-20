@@ -341,7 +341,7 @@ function IdentifyPanel({ doc, autoOpen }) {
                   <td>
                     {c.deep
                       ? <>{c.deep.label || c.deep.relation} <span className="hint">(문자 {c.deep.shingle?.toFixed(2)} · 의미 {c.deep.semantic?.toFixed(2)})</span></>
-                      : <span className="hint">지문만 (docsim 미구성)</span>}
+                      : <span className="hint">지문만 (이 문서에 의미지문 없음 — 발급 시 '의미 검색' 켜면 생성)</span>}
                   </td>
                 </tr>
               ))}

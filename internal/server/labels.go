@@ -52,6 +52,10 @@ type IssueRequest struct {
 	IssuerOrg string `json:"issuerOrg,omitempty"`
 	// Filename: 원본 파일명 — 개발·운영 확인용 주석성 메타데이터(정체성 무관).
 	Filename string `json:"filename,omitempty"`
+	// Text: 본문 텍스트(옵트인) — docsim 의미 지문을 서버가 계산하는 데만 쓴다.
+	// 전달되면 본문이 서버로 전송된다(기본 미전송 원칙의 예외 — 사용자 동의 필요).
+	// 저장하지 않고 지문 계산에만 사용한다.
+	Text string `json:"text,omitempty"`
 	// Sign: 서명 포함 여부. nil/true면 서명 라벨 생성, false면 원장
 	// 등록만(라벨 서명 없음 — 검증 시 signature=absent).
 	Sign *bool `json:"sign,omitempty"`
@@ -204,6 +208,19 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 	// 발급기관 선택: issuerOrg가 지정되면 그 기관 키로 서명한다.
 	iss := s.issuerFor(req.IssuerOrg)
 
+	// docsim 의미 지문: 클라이언트가 직접 제출(CLI)했으면 그대로 쓰고,
+	// 아니면 본문 텍스트가 옵트인으로 전달되고 서버에 docsim이 구성돼
+	// 있을 때 서버가 계산한다(웹에서 브라우저가 docsim을 못 돌리므로).
+	// 텍스트 전송은 발급 요청에 text가 실릴 때만 일어나는 명시적 동의다.
+	docsimFP := req.DocsimFp
+	if docsimFP == "" && req.Text != "" && s.cfg.DocsimBin != "" {
+		if fp, err := docsimFingerprintText(s.cfg.DocsimBin, s.cfg.DocsimDir, req.Text); err == nil {
+			docsimFP = fp
+		} else {
+			s.log.Warn("docsim fingerprint at issue failed", "err", err)
+		}
+	}
+
 	lbl := &issue.Label{
 		Grade:          req.Grade,
 		BasisClause:    req.BasisClause,
@@ -262,7 +279,7 @@ func (s *Server) issueLabel(ctx context.Context, req *IssueRequest, actor string
 		IssuerOrg:     iss.OrgID,
 		SignerCertSN:  signerSN,
 		Actor:         actor,
-		DocsimFP:      req.DocsimFp,
+		DocsimFP:      docsimFP,
 		Filename:      req.Filename,
 	}
 	if req.TextHash != "" {

@@ -56,6 +56,7 @@ components:
         docsimFp: { type: string, description: 사내 docsim 정밀 지문(JSON, 원문 복원 불가) — identify --deep 용 }
         approvalToken: { type: string, description: 파생물을 부모보다 낮은 등급으로 발급 시 필수(상속 규칙) }
         filename: { type: string, description: 원본 파일명 — 개발·운영 확인용 메타데이터(정체성·검증 무관) }
+        text: { type: string, description: '옵트인 본문 텍스트 — 서버가 docsim 의미 지문 계산에만 사용(저장 안 함). 전달 시 본문이 서버로 전송됨(기본 미전송의 예외).' }
     IssueResponse:
       type: object
       properties:
