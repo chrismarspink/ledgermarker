@@ -385,6 +385,7 @@ function RehydratePanel({ doc }) {
 function IdentifyPanel({ doc, autoOpen }) {
   const [state, setState] = React.useState('idle') // idle|busy|done|error|unsupported
   const [cands, setCands] = React.useState([])
+  const [selfHash, setSelfHash] = React.useState('') // 질의 파일 자신의 해시(self-match 표시용)
   const [error, setError] = React.useState('')
 
   React.useEffect(() => { if (autoOpen) run() /* eslint-disable-line */ }, [])
@@ -393,6 +394,7 @@ function IdentifyPanel({ doc, autoOpen }) {
     setState('busy'); setError('')
     try {
       const buf = await doc.arrayBuffer()
+      try { const a = await analyzeFile(doc.name, buf); setSelfHash(a.contentHash) } catch { /* 무시 */ }
       const text = await extractTextForIdentify(doc.name, buf)
       if (!text) {
         // 텍스트 추출 대상 형식인데 빈 결과면 텍스트 레이어가 없는 것
@@ -437,10 +439,16 @@ function IdentifyPanel({ doc, autoOpen }) {
           <table className="ledger">
             <thead><tr><th>유사도</th><th>유사 문서(파일명)</th><th>등급</th><th>발급기관</th><th>docGuid</th><th>docsim 정밀 판정</th></tr></thead>
             <tbody>
-              {cands.map((c, i) => (
+              {cands.map((c, i) => {
+                const isSelf = selfHash && c.contentHash === selfHash
+                return (
                 <tr key={i} className={c.revoked ? 'revoked' : ''}>
                   <td><b>{Math.round(c.similarity * 100)}%</b></td>
-                  <td title={c.filename}>{c.filename || '(파일명 없음)'}</td>
+                  <td title={c.filename}>
+                    {isSelf
+                      ? <><span style={{ background: 'var(--accent-soft, #e7e0f4)', color: 'var(--accent, #6a4bb0)', fontWeight: 700, fontSize: 12, borderRadius: 6, padding: '2px 7px', marginRight: 6 }}>이 파일 자신</span>{c.filename || ''}</>
+                      : (c.filename || '(파일명 없음)')}
+                  </td>
                   <td>{c.grade || '-'}</td>
                   <td>{orgLabel(c.issuerOrg)}</td>
                   <td className="mono" title={c.docGuid}>{c.docGuid.slice(0, 8)}…</td>
@@ -450,7 +458,8 @@ function IdentifyPanel({ doc, autoOpen }) {
                       : <span className="hint">지문만 (이 문서에 의미지문 없음 — 발급 시 '의미 검색' 켜면 생성)</span>}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
