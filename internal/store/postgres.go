@@ -159,6 +159,74 @@ func (p *Postgres) LatestCheckpoint(ctx context.Context) (*ledger.Checkpoint, er
 	return c, nil
 }
 
+func (p *Postgres) Checkpoints(ctx context.Context, limit int) ([]ledger.Checkpoint, error) {
+	rows, err := p.pool.Query(ctx, `SELECT ckpt_id, from_seq, to_seq, merkle_root,
+		signature, signer_cert_sn, signed_at
+		FROM (SELECT * FROM checkpoint ORDER BY ckpt_id DESC LIMIT $1) t ORDER BY ckpt_id ASC`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: checkpoints: %w", err)
+	}
+	defer rows.Close()
+	var out []ledger.Checkpoint
+	for rows.Next() {
+		var c ledger.Checkpoint
+		if err := rows.Scan(&c.ID, &c.FromSeq, &c.ToSeq, &c.MerkleRoot, &c.Signature, &c.SignerCertSN, &c.SignedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (p *Postgres) InsertObservation(ctx context.Context, o *Observation) error {
+	if o.ObservedAt.IsZero() {
+		o.ObservedAt = time.Now()
+	}
+	err := p.pool.QueryRow(ctx, `
+		INSERT INTO gate_observation (kind, doc_guid, content_hash, from_org, to_org, grade,
+			translated_grade, treaty, verdict_hint, actor, note, observed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING obs_id, created_at`,
+		o.Kind, o.DocGUID, o.ContentHash, o.FromOrg, o.ToOrg, o.Grade,
+		o.TranslatedGrade, o.Treaty, o.VerdictHint, o.Actor, o.Note, o.ObservedAt).
+		Scan(&o.ID, &o.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("store: insert observation: %w", err)
+	}
+	return nil
+}
+
+func (p *Postgres) Observations(ctx context.Context, f ObservationFilter) ([]Observation, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 1000
+	}
+	var docGUID interface{}
+	if f.DocGUID != nil {
+		docGUID = *f.DocGUID
+	}
+	rows, err := p.pool.Query(ctx, `SELECT obs_id, kind, doc_guid, content_hash, from_org, to_org,
+		grade, translated_grade, treaty, verdict_hint, actor, note, observed_at, created_at
+		FROM (SELECT * FROM gate_observation
+		      WHERE ($1::uuid IS NULL OR doc_guid = $1)
+		        AND ($2 = '' OR from_org = $2) AND ($3 = '' OR to_org = $3) AND ($4 = '' OR kind = $4)
+		      ORDER BY obs_id DESC LIMIT $5) t ORDER BY obs_id ASC`,
+		docGUID, f.FromOrg, f.ToOrg, f.Kind, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: observations: %w", err)
+	}
+	defer rows.Close()
+	var out []Observation
+	for rows.Next() {
+		var o Observation
+		if err := rows.Scan(&o.ID, &o.Kind, &o.DocGUID, &o.ContentHash, &o.FromOrg, &o.ToOrg,
+			&o.Grade, &o.TranslatedGrade, &o.Treaty, &o.VerdictHint, &o.Actor, &o.Note, &o.ObservedAt, &o.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 func (p *Postgres) GetIdempotent(ctx context.Context, key string) ([]byte, error) {
 	var resp []byte
 	err := p.pool.QueryRow(ctx,

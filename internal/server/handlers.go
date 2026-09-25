@@ -22,6 +22,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		ContentHash string `json:"contentHash"`        // 필수
 		TextHash    string `json:"textHash,omitempty"` // 2차 식별(재저장본 재식별)
 		Level       int    `json:"level,omitempty"`    // 1|2|3(Phase 2)
+		VerifierOrg string `json:"verifierOrg,omitempty"` // 검증 기관(게이트 소속) — 타 기관이면 협정 번역(L3)
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body: "+err.Error())
@@ -44,6 +45,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		Ledger:         s.cfg.Store,
 		Roots:          s.rootsPool(r.Context()),
 		RevokedSerials: s.allRevokedSerials(),
+		Treaty:         s.cfg.Treaty,
 	}
 	var textHash []byte
 	if req.TextHash != "" {
@@ -56,6 +58,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		ContentHash: contentHash,
 		TextHash:    textHash,
 		Level:       req.Level,
+		VerifierOrg: req.VerifierOrg,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -94,6 +97,25 @@ func (s *Server) handleLatestCheckpoint(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, checkpointJSON(c))
+}
+
+// handleCheckpoints 는 체크포인트 목록이다 (GET /v1/checkpoints?limit=) —
+// 원장 시각화의 "봉인 구간" 표시용.
+func (s *Server) handleCheckpoints(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	list, err := s.cfg.Store.Checkpoints(r.Context(), limit)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "ledger unavailable")
+		return
+	}
+	out := make([]map[string]interface{}, 0, len(list))
+	for i := range list {
+		out = append(out, checkpointJSON(&list[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"checkpoints": out})
 }
 
 func (s *Server) handleSealCheckpoint(w http.ResponseWriter, r *http.Request) {
@@ -197,6 +219,15 @@ func (s *Server) handleLedgerEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		if e.Transform != "" {
 			row["transform"] = e.Transform
+		}
+		if e.BRMPath != "" {
+			row["brmPath"] = e.BRMPath
+		}
+		if e.BasisClause != 0 {
+			row["basisClause"] = e.BasisClause
+		}
+		if len(e.BasisKeywords) > 0 {
+			row["basisKeywords"] = e.BasisKeywords
 		}
 		if e.RevokedRef != 0 {
 			row["revokedRef"] = e.RevokedRef

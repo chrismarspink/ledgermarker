@@ -24,6 +24,7 @@ type Memory struct {
 	idem        map[string][]byte
 	anchors     []TrustAnchor
 	fps         []memFP
+	obs         []Observation
 
 	// Unavailable 이 true면 원장 조회가 에러를 반환한다 —
 	// "unavailable"(접속 불가)과 "unregistered"(없음)의 구분 테스트용.
@@ -245,6 +246,55 @@ func (m *Memory) EventCounts(_ context.Context) (map[string]int64, error) {
 	out := map[string]int64{}
 	for _, e := range m.events {
 		out[string(e.Type)]++
+	}
+	return out, nil
+}
+
+func (m *Memory) Checkpoints(_ context.Context, limit int) ([]ledger.Checkpoint, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := append([]ledger.Checkpoint{}, m.checkpoints...)
+	if limit > 0 && len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out, nil
+}
+
+func (m *Memory) InsertObservation(_ context.Context, o *Observation) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	o.ID = int64(len(m.obs) + 1)
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = time.Now()
+	}
+	if o.ObservedAt.IsZero() {
+		o.ObservedAt = o.CreatedAt
+	}
+	m.obs = append(m.obs, *o)
+	return nil
+}
+
+func (m *Memory) Observations(_ context.Context, f ObservationFilter) ([]Observation, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []Observation
+	for _, o := range m.obs {
+		if f.DocGUID != nil && o.DocGUID != *f.DocGUID {
+			continue
+		}
+		if f.FromOrg != "" && o.FromOrg != f.FromOrg {
+			continue
+		}
+		if f.ToOrg != "" && o.ToOrg != f.ToOrg {
+			continue
+		}
+		if f.Kind != "" && o.Kind != f.Kind {
+			continue
+		}
+		out = append(out, o)
+	}
+	if f.Limit > 0 && len(out) > f.Limit {
+		out = out[len(out)-f.Limit:]
 	}
 	return out, nil
 }

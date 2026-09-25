@@ -1,5 +1,6 @@
 import React from 'react'
 import { api } from '../lib/api.js'
+import { VERSION } from '../lib/version.js'
 
 // 운영 대시보드 — 발급·검증·폐기 추이, 체크포인트 상태 (DEV SPEC §8.2)
 export default function AdminPage() {
@@ -22,7 +23,7 @@ export default function AdminPage() {
   const ckpt = stats?.latestCheckpoint
   return (
     <div>
-      <h2>운영 대시보드</h2>
+      <h2>운영 대시보드 <span className="version">LedgerMarker v{VERSION}</span></h2>
       <p className="hint">
         API 키:{' '}
         <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />

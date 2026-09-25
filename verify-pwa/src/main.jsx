@@ -6,6 +6,7 @@ import VerifyPage from './pages/Verify.jsx'
 import IssuePage from './pages/Issue.jsx'
 import LedgerPage from './pages/Ledger.jsx'
 import LineagePage from './pages/Lineage.jsx'
+import SimilarityPage from './pages/Similarity.jsx'
 import AdminPage from './pages/Admin.jsx'
 import KeysPage from './pages/Keys.jsx'
 import HelpPage from './pages/Help.jsx'
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/verify" element={<VerifyPage />} />
           {/* 공격 시나리오는 검증 화면에 통합됨 — 구 경로 호환 */}
           <Route path="/attack" element={<VerifyPage />} />
+          <Route path="/similarity" element={<SimilarityPage />} />
           <Route path="/lineage/:docGuid" element={<LineagePage />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/help/:section" element={<HelpPage />} />

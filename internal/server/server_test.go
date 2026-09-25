@@ -26,14 +26,17 @@ type env struct {
 	c  *gatesdk.Client
 }
 
-func setup(t *testing.T) *env {
+func setup(t *testing.T) *env { return setupWith(t, nil) }
+
+// setupWith 는 기본 구성을 mutate 로 바꿔 서버를 띄운다(협정·샘플 폴더 등).
+func setupWith(t *testing.T, mutate func(*server.Config)) *env {
 	t.Helper()
 	ks, err := softhsm.Open(t.TempDir(), "TESTORG")
 	if err != nil {
 		t.Fatal(err)
 	}
 	st := store.NewMemory()
-	srv := server.New(server.Config{
+	cfg := server.Config{
 		Store:                st,
 		LabelSigner:          ks.LabelSigner(),
 		CheckpointSigner:     ks.CheckpointSigner(),
@@ -43,7 +46,11 @@ func setup(t *testing.T) *env {
 		IssuerOrg:            "TESTORG",
 		RegradeApprovalToken: "secret-approval-token",
 		DestroyApprovalToken: "destroy-committee-token",
-	})
+	}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	srv := server.New(cfg)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 	return &env{ts: ts, st: st, c: gatesdk.New(ts.URL, "")}
@@ -556,5 +563,51 @@ func TestAbsorbSignet_TextHashAndInheritance(t *testing.T) {
 		Lineage: &gatesdk.LineageDecl{ParentHash: hashOf("bytes-v1-original"), Transform: "edit"},
 	}, "inh3"); err != nil {
 		t.Fatalf("same-grade derive must succeed: %v", err)
+	}
+}
+
+// 유사도 테스트 메뉴의 서버 측 — 두 텍스트의 MinHash 자카드 추정.
+func TestCompare(t *testing.T) {
+	e := setup(t)
+	text := "제1조(목적) 이 규정은 문서 등급 표시와 검증 체계 운영에 필요한 사항을 정한다. 제2조(정의) 라벨이란 문서에 부여된 서명된 등급 표시를 말한다."
+	call := func(a, b string) map[string]interface{} {
+		body, _ := json.Marshal(map[string]string{"textA": a, "textB": b})
+		resp, err := http.Post(e.ts.URL+"/v1/compare", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status %d", resp.StatusCode)
+		}
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	simOf := func(out map[string]interface{}) float64 {
+		return out["minhash"].(map[string]interface{})["similarity"].(float64)
+	}
+	if out := call(text, text); simOf(out) != 1.0 || out["docsimConfigured"] != false || out["docsim"] != nil {
+		t.Fatalf("identical: %+v", out)
+	} else {
+		sh := out["shingles"].(map[string]interface{})
+		mh := out["minhash"].(map[string]interface{})
+		if sh["jaccard"] != 1.0 || sh["a"] != sh["common"] || len(mh["matches"].([]interface{})) != 128 || len(mh["sigA"].([]interface{})) != 128 {
+			t.Fatalf("identical detail: %+v", out)
+		}
+	}
+	modified := strings.Replace(text, "지체 없이", "3일 이내에", 1) + " 제3조(부칙) 이 규정은 공포한 날부터 시행한다."
+	if s := simOf(call(text, modified)); s < 0.5 || s >= 1.0 {
+		t.Fatalf("modified similarity %v", s)
+	}
+	if s := simOf(call(text, "오늘 점심은 김치찌개. 내일은 비가 온다고 한다. 주말에는 등산.")); s >= 0.3 {
+		t.Fatalf("unrelated similarity %v", s)
+	}
+	body, _ := json.Marshal(map[string]string{"textA": text})
+	resp, _ := http.Post(e.ts.URL+"/v1/compare", "application/json", bytes.NewReader(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing textB must be 400, got %d", resp.StatusCode)
 	}
 }

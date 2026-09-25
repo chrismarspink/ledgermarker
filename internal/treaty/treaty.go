@@ -9,13 +9,15 @@ import (
 
 // Treaty 는 기관 간 등급 등가성 협정문이다.
 type Treaty struct {
-	ID        string            `json:"id"`
-	PartyA    string            `json:"partyA"`
-	PartyB    string            `json:"partyB"`
-	GradeMap  map[string]string `json:"gradeMap"` // A등급 → B등급 번역표
-	SignedAt  time.Time         `json:"signedAt"`
-	NotAfter  time.Time         `json:"notAfter"`
-	Signature []byte            `json:"signature,omitempty"` // Treaty Signer 서명
+	ID         string            `json:"id"`
+	PartyA     string            `json:"partyA"`
+	PartyAName string            `json:"partyAName,omitempty"` // 한글 기관명(표시용) — 약어와 병기
+	PartyB     string            `json:"partyB"`
+	PartyBName string            `json:"partyBName,omitempty"`
+	GradeMap   map[string]string `json:"gradeMap"` // A등급 → B등급 번역표
+	SignedAt   time.Time         `json:"signedAt"`
+	NotAfter   time.Time         `json:"notAfter"`
+	Signature  []byte            `json:"signature,omitempty"` // Treaty Signer 서명
 }
 
 // Service 는 협정 조회·등급 번역 계약이다. Phase 1 구현체는 없으며,

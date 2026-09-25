@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -127,8 +128,9 @@ func main() {
 		RegradeApprovalToken: regradeToken,
 		DestroyApprovalToken: destroyToken,
 		Treaty:               treatySvc,
-		DocsimBin:            os.Getenv("LM_DOCSIM"),
-		DocsimDir:            docsimDir(os.Getenv("LM_DOCSIM")),
+		DocsimBin:            docsimBin(),
+		SampleDir:            os.Getenv("LM_SAMPLE_DIR"),
+		DocsimDir:            docsimDir(docsimBin()),
 		Logger:               log,
 		RefreshView:          refresh,
 	})
@@ -150,6 +152,22 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// docsimBin 은 docsim 실행 파일 경로다. LM_DOCSIM 이 있으면 그것을, 없으면
+// 표준 설치 위치(~/docsim/.venv/bin/docsim)가 존재할 때 그것을 쓴다 — docsim은
+// 기본 동작이며, 설치돼 있지 않을 때만 비활성화된다.
+func docsimBin() string {
+	if b := os.Getenv("LM_DOCSIM"); b != "" {
+		return b
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		std := filepath.Join(home, "docsim", ".venv", "bin", "docsim")
+		if st, err := os.Stat(std); err == nil && !st.IsDir() {
+			return std
+		}
+	}
+	return ""
 }
 
 // docsimDir 는 docsim 실행 파일 경로에서 프로젝트 루트를 추정한다

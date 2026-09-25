@@ -12,6 +12,33 @@ import (
 )
 
 // TrustAnchor 는 신뢰목록 항목(파트너 기관 CA)이다.
+// Observation 은 게이트 관측 로그 한 행이다.
+type Observation struct {
+	ID              int64     `json:"id"`
+	Kind            string    `json:"kind"` // SENT | RECEIVED | VERIFIED
+	DocGUID         uuid.UUID `json:"docGuid"`
+	ContentHash     []byte    `json:"-"`
+	FromOrg         string    `json:"fromOrg"`
+	ToOrg           string    `json:"toOrg"`
+	Grade           string    `json:"grade,omitempty"`           // 발급 등급
+	TranslatedGrade string    `json:"translatedGrade,omitempty"` // 검증 기관 기준 등급
+	Treaty          string    `json:"treaty,omitempty"`          // verify.Checks.Treaty 값
+	VerdictHint     string    `json:"verdictHint,omitempty"`
+	Actor           string    `json:"actor,omitempty"`
+	Note            string    `json:"note,omitempty"`
+	ObservedAt      time.Time `json:"observedAt"` // 게이트가 보고한 시각
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+// ObservationFilter 는 관측 로그 조회 조건이다. 빈 값은 무시한다.
+type ObservationFilter struct {
+	DocGUID *uuid.UUID
+	FromOrg string
+	ToOrg   string
+	Kind    string
+	Limit   int
+}
+
 type TrustAnchor struct {
 	ID      int64     `json:"id"`
 	OrgID   string    `json:"orgId"`
@@ -52,6 +79,16 @@ type Store interface {
 
 	// ── 통계 (admin 대시보드) ──
 	EventCounts(ctx context.Context) (map[string]int64, error)
+
+	// ── 체크포인트 목록 (시각화의 봉인 구간) ──
+	Checkpoints(ctx context.Context, limit int) ([]ledger.Checkpoint, error)
+
+	// ── 게이트 관측 로그 (기관 간 이동·검증 기록) ──
+	// 원장과 분리된 추가 전용 로그다: 발급 측 진실(원장)과 달리 게이트가
+	// "보고한" 사실(보냈다·받았다·이렇게 읽었다)을 담는다. 본문은 없고
+	// 판정은 호출자 보고값이므로 불변식 3·4와 정합한다.
+	InsertObservation(ctx context.Context, o *Observation) error
+	Observations(ctx context.Context, f ObservationFilter) ([]Observation, error)
 
 	Close()
 }

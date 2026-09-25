@@ -26,9 +26,13 @@ const CHECK_META = {
     tone: { in_window: 'ok', expired: 'warn', not_yet: 'warn' }
   },
   treaty: {
-    title: '협정',
-    text: { present: '적용', absent: '협정 없음', not_applicable: '해당 없음(Phase 2)' },
-    tone: { present: 'ok', absent: 'warn', not_applicable: 'ok' }
+    title: '협정(기관 간)',
+    text: {
+      not_applicable: '자기 기관 — 해당 없음', translated: '협정으로 등급 번역',
+      no_treaty: '협정 없음 — 서명만 확인', expired: '협정 만료', not_translatable: '번역 불가(내부 전용)',
+      present: '적용', absent: '협정 없음'
+    },
+    tone: { not_applicable: 'ok', translated: 'ok', no_treaty: 'warn', expired: 'warn', not_translatable: 'bad', present: 'ok', absent: 'warn' }
   }
 }
 
@@ -66,6 +70,15 @@ export default function ResultCard({ result }) {
             <div className="mono">최초 조상 {attribution.rootDocId}</div>
           )}
           <div className="hint">귀속 신뢰도 {attribution.confidence ?? '-'} (선언적=1.0)</div>
+          {checks.treaty && checks.treaty !== 'not_applicable' && (
+            <div style={{ fontSize: 13, marginTop: 4 }}>
+              기관 간: {checks.treaty === 'translated'
+                ? <>협정 번역 → 검증 기관 기준 등급 <b>{result.translatedGrade}</b></>
+                : checks.treaty === 'not_translatable' ? <b style={{ color: 'var(--bad)' }}>번역 불가 — C(비밀)·잠정 라벨은 기관 내부 전용</b>
+                : checks.treaty === 'expired' ? <b style={{ color: 'var(--warn)' }}>협정 만료 — 서명 진위까지만 확인</b>
+                : <b style={{ color: 'var(--warn)' }}>협정 없음 — 서명 진위까지만 확인, 등급 미번역</b>}
+            </div>
+          )}
         </div>
       </div>
 

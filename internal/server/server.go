@@ -49,6 +49,9 @@ type Config struct {
 	// 설정되면 /v1/identify 에서 텍스트가 오면 정밀 판정을 채워 준다.
 	DocsimBin string
 	DocsimDir string
+	// SampleDir: 기능 테스트용 샘플 폴더(manifest.json 포함, 선택). 설정되면
+	// POST /v1/admin/load-samples 가 샘플을 일괄 발급해 원장을 채운다.
+	SampleDir string
 	Logger               *slog.Logger
 	// RefreshView 는 쓰기 후 current_label 구체화 뷰 갱신 훅(선택)이다.
 	RefreshView func(ctx context.Context) error
@@ -126,8 +129,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	mux.HandleFunc("POST /v1/verify", s.handleVerify)
 	mux.HandleFunc("POST /v1/identify", s.handleIdentify) // 지문 유사도 재식별
+	mux.HandleFunc("POST /v1/compare", s.handleCompare)   // 두 텍스트 유사도 (유사도 테스트)
 	mux.HandleFunc("GET /v1/documents/{docGuid}/lineage", s.handleLineage)
 	mux.HandleFunc("GET /v1/checkpoints/latest", s.handleLatestCheckpoint)
+	mux.HandleFunc("GET /v1/checkpoints", s.handleCheckpoints) // 봉인 목록 (시각화)
 	mux.HandleFunc("GET /v1/trust/list", s.handleTrustList)
 	mux.HandleFunc("GET /v1/keys", s.handleKeys)         // 공개키·인증서만 노출
 	mux.HandleFunc("GET /v1/formats", s.handleFormats)   // 포맷 카탈로그 (공개, 캐시 대상)
@@ -149,6 +154,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/batch/scan", s.auth(s.handleBatchScan))
 	mux.HandleFunc("GET /v1/batch/{jobId}", s.auth(s.handleBatchStatus))
 	mux.HandleFunc("GET /v1/admin/stats", s.auth(s.handleAdminStats))
+	mux.HandleFunc("POST /v1/admin/load-samples", s.auth(s.handleLoadSamples)) // 샘플 일괄 발급(기능 테스트)
+	// 게이트 관측 로그 — 기관 간 보냄·수신·검증 기록 (원장과 분리된 추가 전용 로그)
+	mux.HandleFunc("POST /v1/observations", s.auth(s.handleObserve))
+	mux.HandleFunc("GET /v1/observations", s.auth(s.handleObservations))
 
 	return s.cors(mux)
 }

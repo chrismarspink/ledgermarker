@@ -14,6 +14,33 @@ type deepVerdict struct {
 	Label    string  `json:"label,omitempty"`    // 한글 판정 문구
 	Shingle  float64 `json:"shingle,omitempty"`  // 문자 유사도(자카드)
 	Semantic float64 `json:"semantic,omitempty"` // 의미 유사도(max cosine)
+	// 아래는 시각화용 세부(유사도 테스트 메뉴): 포함률·청크 연결·판정 요약.
+	Summary    string      `json:"summary,omitempty"`
+	Confidence string      `json:"confidence,omitempty"`
+	ContainAB  float64     `json:"containAB,omitempty"` // A 내용 중 B에 있는 비율
+	ContainBA  float64     `json:"containBA,omitempty"`
+	ChunksA    int         `json:"chunksA,omitempty"` // 의미 청크 수(지문에서 셈)
+	ChunksB    int         `json:"chunksB,omitempty"`
+	TopPairs   []chunkPair `json:"topPairs,omitempty"` // 상위 청크쌍(docsim top_pairs)
+}
+
+type chunkPair struct {
+	A      int     `json:"a"`
+	B      int     `json:"b"`
+	Cosine float64 `json:"cosine"`
+}
+
+// docsimChunkCount 는 docsim 지문 JSON의 의미 청크 수를 센다(실패 시 0).
+func docsimChunkCount(fpJSON string) int {
+	var fp struct {
+		Embed struct {
+			Chunks []json.RawMessage `json:"chunks"`
+		} `json:"embed"`
+	}
+	if json.Unmarshal([]byte(fpJSON), &fp) != nil {
+		return 0
+	}
+	return len(fp.Embed.Chunks)
 }
 
 // docsimFingerprintText 는 텍스트의 docsim 지문(JSON)을 만든다.
@@ -72,19 +99,31 @@ func docsimCompareFP(bin, dir, aFP, bFP string) (*deepVerdict, error) {
 	if err := json.Unmarshal(out, &m); err != nil {
 		return nil, err
 	}
-	v := &deepVerdict{}
+	v := &deepVerdict{ChunksA: docsimChunkCount(aFP), ChunksB: docsimChunkCount(bFP)}
 	if vd, ok := m["verdict"].(map[string]interface{}); ok {
 		v.Relation, _ = vd["relation"].(string)
 		v.Label, _ = vd["label"].(string)
+		v.Summary, _ = vd["summary"].(string)
+		v.Confidence, _ = vd["confidence"].(string)
 	}
 	if sh, ok := m["shingle"].(map[string]interface{}); ok {
-		if f, ok := sh["jaccard"].(float64); ok {
-			v.Shingle = f
-		}
+		v.Shingle, _ = sh["jaccard"].(float64)
+		v.ContainAB, _ = sh["containment_a_in_b"].(float64)
+		v.ContainBA, _ = sh["containment_b_in_a"].(float64)
 	}
 	if em, ok := m["embed"].(map[string]interface{}); ok {
-		if f, ok := em["max_cosine"].(float64); ok {
-			v.Semantic = f
+		v.Semantic, _ = em["max_cosine"].(float64)
+		if pairs, ok := em["top_pairs"].([]interface{}); ok {
+			for _, p := range pairs {
+				pm, ok := p.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				ai, _ := pm["a_index"].(float64)
+				bi, _ := pm["b_index"].(float64)
+				cos, _ := pm["cosine"].(float64)
+				v.TopPairs = append(v.TopPairs, chunkPair{A: int(ai), B: int(bi), Cosine: cos})
+			}
 		}
 	}
 	return v, nil

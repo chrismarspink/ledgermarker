@@ -88,11 +88,27 @@ func docsimDir(bin string) string {
 	return ""
 }
 
+// docsimBin 은 docsim 실행 파일 경로다. LM_DOCSIM 이 있으면 그것을, 없으면
+// 표준 설치 위치(~/docsim/.venv/bin/docsim)가 존재할 때 그것을 쓴다 — docsim은
+// 기본 동작이며, 설치돼 있지 않을 때만 조용히 생략된다.
+func docsimBin() string {
+	if b := os.Getenv("LM_DOCSIM"); b != "" {
+		return b
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		std := filepath.Join(home, "docsim", ".venv", "bin", "docsim")
+		if st, err := os.Stat(std); err == nil && !st.IsDir() {
+			return std
+		}
+	}
+	return ""
+}
+
 // docsimFingerprint 는 사내 docsim 모듈로 정밀 지문을 계산한다.
-// LM_DOCSIM 환경변수(docsim 실행 파일 경로)가 설정된 경우에만 동작 —
+// docsim 실행 파일을 찾을 수 있을 때만 동작(docsimBin) —
 // docsim 코드는 수정하지 않고 CLI 어댑터로만 결합한다.
 func docsimFingerprint(path string) string {
-	bin := os.Getenv("LM_DOCSIM")
+	bin := docsimBin()
 	if bin == "" {
 		return ""
 	}
@@ -139,7 +155,8 @@ func main() {
 		os.Getenv("LM_API_KEY"), "X-LM-Key API 키")
 
 	root.AddCommand(cmdIssue(), cmdScan(), cmdVerify(), cmdIdentify(), cmdRestore(),
-		cmdLineage(), cmdRevoke(), cmdRegrade(), cmdDestroy(), cmdLedger(), cmdTrust(), cmdPKI())
+		cmdLineage(), cmdRevoke(), cmdRegrade(), cmdDestroy(), cmdLedger(), cmdTrust(), cmdPKI(),
+		cmdSend(), cmdReceive())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
@@ -331,7 +348,7 @@ func cmdIdentify() *cobra.Command {
 	var deep bool
 	c := &cobra.Command{
 		Use:   "identify <파일>",
-		Short: "유사 문서 재식별 — 수정·변환된 파일의 원본 후보를 지문으로 탐색 (--deep: docsim 정밀·의미 비교)",
+		Short: "유사 문서 재식별 — 수정·변환된 파일의 원본 후보를 지문으로 탐색 + docsim(讀心) 정밀·의미 비교 (--deep=false 로 생략)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			path := args[0]
@@ -379,7 +396,7 @@ func cmdIdentify() *cobra.Command {
 		},
 	}
 	c.Flags().IntVar(&limit, "limit", 5, "후보 수")
-	c.Flags().BoolVar(&deep, "deep", false, "사내 docsim으로 정밀·의미 비교 (LM_DOCSIM=docsim 실행 파일 경로)")
+	c.Flags().BoolVar(&deep, "deep", true, "사내 docsim으로 정밀·의미 비교 (기본 켬, docsim 미설치 시 자동 생략; 경로는 LM_DOCSIM)")
 	return c
 }
 
@@ -387,9 +404,9 @@ func cmdIdentify() *cobra.Command {
 // (슁글 + 의미 임베딩 2엔진)으로 정밀 비교한다. 발급 시 저장된 docsim
 // 지문(compare-fp)을 쓰므로 후보의 원문이 없어도 된다.
 func deepCompare(path string, cands []gatesdk.IdentifyCandidate) error {
-	bin := os.Getenv("LM_DOCSIM")
+	bin := docsimBin()
 	if bin == "" {
-		return fmt.Errorf("LM_DOCSIM 미설정 (예: export LM_DOCSIM=~/docsim/.venv/bin/docsim)")
+		return fmt.Errorf("docsim 미설치 (~/docsim/.venv/bin/docsim 없음 — 다른 위치면 LM_DOCSIM=경로)")
 	}
 	mineFP := docsimFingerprint(path)
 	if mineFP == "" {
@@ -403,7 +420,7 @@ func deepCompare(path string, cands []gatesdk.IdentifyCandidate) error {
 	mine.WriteString(mineFP)
 	mine.Close()
 
-	fmt.Println("\ndocsim 정밀 비교 (엔진A 슁글 / 엔진B 의미):")
+	fmt.Println("\ndocsim(讀心) 정밀 비교 (엔진A 슁글 / 엔진B 의미):")
 	compared := 0
 	for i, cd := range cands {
 		if cd.DocsimFp == "" {
@@ -679,6 +696,7 @@ func cmdScan() *cobra.Command {
 func cmdVerify() *cobra.Command {
 	var level int
 	var jsonOut bool
+	var as string // 검증 기관 페르소나 — 발급 기관과 다르면 협정 번역(L3)
 	c := &cobra.Command{
 		Use:   "verify <파일...>",
 		Short: "배치 검증 (사이드카 자동 탐색, 없으면 폴백 검증)",
@@ -690,7 +708,7 @@ func cmdVerify() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				req := gatesdk.VerifyRequest{Level: level}
+				req := gatesdk.VerifyRequest{Level: level, VerifierOrg: as}
 				// 해시 대상은 항상 "라벨 제외 본문" (포맷별 정규화 포함)
 				req.ContentHash, err = hashTargetHex(attacher, data)
 				if err != nil {
@@ -726,6 +744,7 @@ func cmdVerify() *cobra.Command {
 	}
 	c.Flags().IntVar(&level, "level", 2, "검증 레벨 (1=로컬, 2=원장)")
 	c.Flags().BoolVar(&jsonOut, "json", false, "JSON 출력")
+	c.Flags().StringVar(&as, "as", os.Getenv("LM_ORG"), "검증 기관 페르소나(예: MOIS) — 발급 기관과 다르면 협정으로 등급 번역 (기본 LM_ORG)")
 	return c
 }
 
@@ -738,6 +757,9 @@ func printResult(path string, r *gatesdk.VerifyResponse) {
 	fmt.Printf("   서명=%s  원장=%s  폐기=%s  유효기간=%s  협정=%s\n",
 		r.Checks.Signature, r.Checks.Ledger, r.Checks.Revocation,
 		r.Checks.Validity, r.Checks.Treaty)
+	if r.Checks.Treaty != "not_applicable" {
+		fmt.Printf("   기관 간: 발급 %s 등급 %s → 검증 기관 기준 %s\n", r.Attribution.IssuerOrg, r.Attribution.Grade, r.TranslatedGrade)
+	}
 	fmt.Printf("   참고 판정(verdictHint): %s  [%s]\n", r.VerdictHint, strings.Join(r.Reasons, ", "))
 }
 

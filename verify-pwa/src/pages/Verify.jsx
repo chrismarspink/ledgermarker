@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { sha256Hex, sha256HexBytes, bytesToBase64, hexToBytes } from '../lib/hash.js'
-import { api, getTrustListCached } from '../lib/api.js'
+import { api, getTrustListCached, currentOrg } from '../lib/api.js'
 import { parseLabel, verifyLocal } from '../lib/cms.js'
 import { extractEmbedded } from '../lib/embed.js'
 import { analyzeFile, extractTextForIdentify } from '../lib/attach.js'
@@ -10,6 +10,7 @@ import { orgLabel } from '../lib/orgs.js'
 import ResultCard from '../components/ResultCard.jsx'
 import StructureView from '../components/StructureView.jsx'
 import AttackDemo from '../components/AttackDemo.jsx'
+import { SendPanel, InboxPanel } from '../components/Federation.jsx'
 
 export default function VerifyPage() {
   const [drag, setDrag] = React.useState(false)
@@ -63,6 +64,7 @@ export default function VerifyPage() {
         </button>
       </p>
       {scanOpen && <QRScanner onResult={(r) => { setScanOpen(false); setResult(r) }} onError={setError} />}
+      {!result && !busy && <InboxPanel />}
       {busy && <p style={{ textAlign: 'center' }}>검증 중…</p>}
       {error && <p className="error" style={{ textAlign: 'center' }}>{error}</p>}
       {result && (
@@ -72,6 +74,9 @@ export default function VerifyPage() {
             <p style={{ textAlign: 'center' }}>
               <Link to={`/lineage/${result.attribution.docGuid}`}>이 문서의 가계도(계보) 보기 →</Link>
             </p>
+          )}
+          {result.attribution?.docGuid && result.meta?.contentHash && result.checks?.ledger === 'registered' && (
+            <SendPanel result={result} />
           )}
           {result.checks?.signature === 'absent' && result.checks?.ledger === 'registered' && (
             <RestoreLabel meta={result.meta} />
@@ -158,7 +163,8 @@ async function runVerify(doc, sig) {
       labelData: labelDerB64 || undefined,
       contentHash,
       textHash: textHash || undefined, // 재저장본 2차 재식별
-      level: 2
+      level: 2,
+      verifierOrg: currentOrg() || undefined // 현재 기관 페르소나 — 발급 기관과 다르면 협정 번역(L3)
     })
     return { ...res, meta, offline: false }
   } catch (e) {
@@ -414,7 +420,7 @@ function IdentifyPanel({ doc, autoOpen }) {
 
   return (
     <div className="card">
-      <h2>유사 문서 재식별 (docsim)</h2>
+      <h2>유사 문서 재식별 (docsim 讀心)</h2>
       <p className="hint">
         내용 유사도로 원장의 원본 후보를 찾습니다 (수정본·형식 변환본·재작성).
         텍스트 형식이면 사내 docsim이 정밀·의미 판정까지 채웁니다.

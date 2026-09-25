@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
 	"github.com/innotium/ledgermarker/internal/issue"
 	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/innotium/ledgermarker/internal/treaty"
 )
 
 // 체크 항목 값 (DEV SPEC §6.3)
@@ -38,6 +40,11 @@ const (
 	ValNotYet   = "not_yet"
 
 	TreatyNotApplicable = "not_applicable"
+	// L3 (기관 간): 검증 기관이 발급 기관과 다를 때만 채워진다.
+	TreatyTranslated      = "translated"       // 협정 번역표로 등급 번역됨
+	TreatyNoTreaty        = "no_treaty"        // 협정 없음 — 서명 진위까지만 확인
+	TreatyExpired         = "expired"          // 협정 만료
+	TreatyNotTranslatable = "not_translatable" // C(비밀)·PROVISIONAL은 기관 내부 전용
 
 	HintAllow  = "allow"
 	HintDeny   = "deny"
@@ -63,6 +70,9 @@ type Params struct {
 	// 재저장·재압축본을 정확 재식별하는 2차 색인 (SigNET H-5 흡수).
 	TextHash []byte
 	Level    int // 1=로컬, 2=원장, 3=상호(Phase 2)
+	// VerifierOrg 는 검증을 수행하는 기관이다(게이트 소속). 발급 기관과 다르면
+	// 등가성 협정으로 등급을 번역한다(L3). 비어 있으면 자기 기관 검증으로 본다.
+	VerifierOrg string
 }
 
 // Deps 는 검증 의존성이다.
@@ -72,6 +82,8 @@ type Deps struct {
 	RevokedSerials map[string]bool
 	CMS            lmcrypto.Verifier
 	Now            func() time.Time // nil이면 time.Now
+	// Treaty 는 등가성 협정 서비스(선택). nil이면 타 기관 라벨은 "no_treaty".
+	Treaty treaty.Service
 }
 
 // Attribution 은 "이 문서가 무엇인가"에 대한 답이다.
@@ -315,7 +327,40 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 			res.Attribution.RootDocID = lbl.RootDocID.String()
 		}
 	}
-	res.TranslatedGrade = res.Attribution.Grade // 협정 번역은 Phase 2
+	res.TranslatedGrade = res.Attribution.Grade
+
+	// ── L3: 기관 간 등급 번역 (docs/treaty-policy.md) ──
+	// 발급 기관 ≠ 검증 기관이면 협정 번역표로 등급을 옮긴다. 협정이 없으면
+	// 서명 진위까지만 확인된 것이고, C(비밀)·PROVISIONAL은 협정 대상이 아니다
+	// (기관 내부 전용). 번역은 귀속의 표현일 뿐 판정이 아니다(불변식 4).
+	if p.VerifierOrg != "" && res.Attribution.IssuerOrg != "" &&
+		!strings.EqualFold(p.VerifierOrg, res.Attribution.IssuerOrg) {
+		switch {
+		case res.Attribution.Grade == "C":
+			res.Checks.Treaty = TreatyNotTranslatable
+			res.Reasons = append(res.Reasons, "grade_c_internal_only")
+		case res.Attribution.ApprovalState == "PROVISIONAL":
+			res.Checks.Treaty = TreatyNotTranslatable
+			res.Reasons = append(res.Reasons, "provisional_not_translatable")
+		case deps.Treaty == nil:
+			res.Checks.Treaty = TreatyNoTreaty
+			res.Reasons = append(res.Reasons, "no_treaty_signature_only")
+		default:
+			g, found, err := deps.Treaty.Translate(ctx, res.Attribution.IssuerOrg, p.VerifierOrg, res.Attribution.Grade)
+			switch {
+			case err == nil && found:
+				res.Checks.Treaty = TreatyTranslated
+				res.TranslatedGrade = g
+				res.Reasons = append(res.Reasons, "treaty_translated")
+			case treatyExpired(ctx, deps.Treaty, res.Attribution.IssuerOrg, p.VerifierOrg, nowT):
+				res.Checks.Treaty = TreatyExpired
+				res.Reasons = append(res.Reasons, "treaty_expired")
+			default:
+				res.Checks.Treaty = TreatyNoTreaty
+				res.Reasons = append(res.Reasons, "no_treaty_signature_only")
+			}
+		}
+	}
 
 	// ── 시한부 공개 전환 신호 (lifecycle-policy.md §2) ──
 	// disclosureCondition 도래는 자동 공개가 아니라 "재분류 절차 개시" 신호다.
@@ -328,6 +373,15 @@ func Run(ctx context.Context, deps Deps, p Params) (*Result, error) {
 	res.VerdictHint = hint(res)
 	for _, r := range res.Reasons {
 		if r == "disclosure_condition_reached_reclassify" && res.VerdictHint == HintAllow {
+			res.VerdictHint = HintReview
+		}
+	}
+	// 기관 간: 번역 불가는 차단 힌트, 협정 없음·만료는 검토 힌트.
+	switch res.Checks.Treaty {
+	case TreatyNotTranslatable:
+		res.VerdictHint = HintDeny
+	case TreatyNoTreaty, TreatyExpired:
+		if res.VerdictHint == HintAllow {
 			res.VerdictHint = HintReview
 		}
 	}
@@ -359,3 +413,19 @@ func hint(r *Result) string {
 }
 
 func isZero(u uuid.UUID) bool { return u == uuid.Nil }
+
+// treatyExpired 는 두 기관 사이에 협정이 있었으나 만료된 경우인지 본다.
+func treatyExpired(ctx context.Context, svc treaty.Service, a, b string, now time.Time) bool {
+	list, err := svc.List(ctx)
+	if err != nil {
+		return false
+	}
+	ua, ub := strings.ToUpper(a), strings.ToUpper(b)
+	for _, t := range list {
+		pa, pb := strings.ToUpper(t.PartyA), strings.ToUpper(t.PartyB)
+		if ((pa == ua && pb == ub) || (pa == ub && pb == ua)) && now.After(t.NotAfter) {
+			return true
+		}
+	}
+	return false
+}

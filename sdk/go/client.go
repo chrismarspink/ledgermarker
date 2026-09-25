@@ -33,10 +33,11 @@ func New(baseURL, apiKey string) *Client {
 // ── 검증 (POST /v1/verify) ──────────────────────────────
 
 type VerifyRequest struct {
-	LabelDER    string `json:"labelData,omitempty"` // base64. 없으면 폴백 검증
-	ContentHash string `json:"contentHash"`         // hex SHA-256 — 필수
-	TextHash    string `json:"textHash,omitempty"`  // 정규화 본문 텍스트 해시 (재저장본 재식별)
-	Level       int    `json:"level,omitempty"`     // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
+	LabelDER    string `json:"labelData,omitempty"`   // base64. 없으면 폴백 검증
+	ContentHash string `json:"contentHash"`           // hex SHA-256 — 필수
+	TextHash    string `json:"textHash,omitempty"`    // 정규화 본문 텍스트 해시 (재저장본 재식별)
+	Level       int    `json:"level,omitempty"`       // 1=로컬, 2=원장(기본), 3=상호(Phase 2)
+	VerifierOrg string `json:"verifierOrg,omitempty"` // 검증 기관 — 발급 기관과 다르면 협정 번역(L3)
 }
 
 type Attribution struct {
@@ -190,6 +191,27 @@ func (c *Client) Identify(ctx context.Context, minhashB64 string, limit int) ([]
 		return nil, err
 	}
 	return out.Candidates, nil
+}
+
+// Observation 은 게이트 관측 로그 한 건이다 — 기관 간 보냄·수신·검증 기록.
+// 원장(발급 측 진실)과 별개의 추가 전용 로그다.
+type Observation struct {
+	Kind            string    `json:"kind"` // SENT | RECEIVED | VERIFIED
+	DocGUID         string    `json:"docGuid"`
+	ContentHash     string    `json:"contentHash,omitempty"`
+	FromOrg         string    `json:"fromOrg"`
+	ToOrg           string    `json:"toOrg"`
+	Grade           string    `json:"grade,omitempty"`
+	TranslatedGrade string    `json:"translatedGrade,omitempty"`
+	Treaty          string    `json:"treaty,omitempty"`
+	VerdictHint     string    `json:"verdictHint,omitempty"`
+	Note            string    `json:"note,omitempty"`
+	ObservedAt      time.Time `json:"observedAt,omitempty"`
+}
+
+// Observe 는 관측 로그를 기록한다 (POST /v1/observations).
+func (c *Client) Observe(ctx context.Context, o Observation) error {
+	return c.do(ctx, http.MethodPost, "/v1/observations", "", o, nil)
 }
 
 // RestoreRequest 는 유출·변형된 파일의 정체성 복원 요청이다.

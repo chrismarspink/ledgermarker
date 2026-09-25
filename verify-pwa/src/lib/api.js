@@ -22,6 +22,8 @@ export const api = {
   // 지문 유사도 재식별 — text가 있으면 서버가 docsim 정밀 판정을 채운다.
   identify: (minhash, text) =>
     req('POST', '/v1/identify', { minhash, text: text || undefined, limit: 5 }),
+  // 두 본문 텍스트의 유사도 — MinHash 자카드(서버 fingerprint) + docsim 의미(구성 시).
+  compare: (textA, textB) => req('POST', '/v1/compare', { textA, textB }),
   // 지문 색인 갱신 — 파일의 해시·본문 텍스트로 원장의 색인을 교체(서버가 지문 계산).
   reindex: (contentHash, text, apiKey) =>
     req('POST', '/v1/reindex', { contentHash, text }, apiKey),
@@ -50,7 +52,28 @@ export const api = {
     req('POST', '/v1/formats/resolve', { filename, magicHex }),
   adminStats: (apiKey) => req('GET', '/v1/admin/stats', null, apiKey),
   ledgerEvents: (apiKey, limit = 50) =>
-    req('GET', `/v1/ledger/events?limit=${limit}`, null, apiKey)
+    req('GET', `/v1/ledger/events?limit=${limit}`, null, apiKey),
+  // 봉인(체크포인트) 목록 — 원장 시각화의 봉인 구간
+  checkpoints: (limit = 100) => req('GET', `/v1/checkpoints?limit=${limit}`),
+  // 게이트 관측 로그 — 기관 간 보냄·수신·검증 기록(원장과 분리된 추가 전용 로그)
+  observations: (params = {}, apiKey) => {
+    const q = Object.entries(params).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+    return req('GET', `/v1/observations${q ? '?' + q : ''}`, null, apiKey)
+  },
+  observe: (payload, apiKey) => req('POST', '/v1/observations', payload, apiKey),
+  // 샘플 파일 일괄 발급(기능 테스트) — 서버의 LM_SAMPLE_DIR/manifest.json 실행
+  loadSamples: (apiKey) => req('POST', '/v1/admin/load-samples', {}, apiKey)
+}
+
+// 현재 기관 페르소나 — 모델 A(단일 서버 다중 기관). 발급 시 기본 발급기관,
+// 검증 시 verifierOrg(협정 번역 기준)가 된다. 저장은 브라우저 로컬.
+export function currentOrg() {
+  return localStorage.getItem('lm-org') || ''
+}
+export function setCurrentOrg(id) {
+  if (id) localStorage.setItem('lm-org', id)
+  else localStorage.removeItem('lm-org')
+  window.dispatchEvent(new Event('lm-org-changed'))
 }
 
 // 신뢰목록은 Service Worker 캐시 + localStorage 이중 보관 —

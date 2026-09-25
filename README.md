@@ -57,7 +57,10 @@ docker compose -f deploy/docker-compose.yml up --build
 | `LM_API_KEYS` | (없음 = 개발 모드) | 쉼표 구분 API 키 — 비공개 엔드포인트 보호 |
 | `LM_REGRADE_TOKEN` | (없음) | 등급 하향(공개 전환) 승인 토큰 |
 | `LM_DESTROY_TOKEN` | (없음 = 파기 비활성) | 파기 심의 승인 토큰 — docs/lifecycle-policy.md |
-| `LM_TREATIES` | (없음) | 등가성 협정 JSON 경로 — docs/treaty-policy.md |
+| `LM_TREATIES` | (없음) | 등가성 협정 JSON 경로 — docs/treaty-policy.md. 설정되면 검증 요청의 `verifierOrg`가 발급 기관과 다를 때 등급을 번역한다(L3) |
+| `LM_ISSUERS` | (없음) | 추가 발급기관 `orgId:표시명:키스토어경로,...` — 한 서버가 여러 기관으로 발급(모델 A, 페르소나 전환) |
+| `LM_DOCSIM` | `~/docsim/.venv/bin/docsim` 자동 탐지 | docsim(讀心) 실행 파일 — 의미 지문·정밀 비교. 없으면 조용히 생략 |
+| `LM_SAMPLE_DIR` | (없음) | 샘플 폴더(manifest.json 포함). `POST /v1/admin/load-samples`·웹 원장의 "샘플 파일 로딩" 버튼이 일괄 발급 |
 
 ## 테스트 (수용 기준 T1~T13)
 

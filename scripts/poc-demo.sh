@@ -64,4 +64,12 @@ step "⑦ 이동·수정·변환 이력 — Lineage/Audit (append-only 원장)"
 $LM ledger list --limit 6
 $LM ledger verify
 
+step "⑧ 기관 간 전달 — 우정사업본부(KPOST) → 이노티움(INNOTIUM) 협정 번역 / C등급 차단"
+# 보내는 기관이 SENT 를 남기고 파일·사이드카를 상대 폴더로 복사, 받는 기관 게이트가 원장 조회+협정 번역으로 검증해 VERIFIED 를 남긴다.
+# 원장 행은 늘지 않는다(발급 사실이 아니라 게이트가 보고한 사실 — 관측 로그).
+$LM send "$W/문서관리규정.docx" --as KPOST --to INNOTIUM --copy-to "$W/inbox-INNOTIUM"
+$LM receive "$W/inbox-INNOTIUM/문서관리규정.docx" --as INNOTIUM || true
+$LM send "$W/문서관리규정.docx" --as KPOST --to NTS --copy-to "$W/inbox-NTS"
+$LM receive "$W/inbox-NTS/문서관리규정.docx" --as NTS || true   # 협정 없음 → 서명 진위까지만, 검토 권고
+
 printf '\n완료. 산출물: %s\n' "$W"

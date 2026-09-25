@@ -1,16 +1,20 @@
 [
   {
-    "id": "kpost-mois-2026-01",
+    "id": "kpost-innotium-2026-01",
     "partyA": "KPOST",
-    "partyB": "MOIS",
+    "partyAName": "우정사업본부",
+    "partyB": "INNOTIUM",
+    "partyBName": "이노티움",
     "gradeMap": { "S": "S", "O": "O" },
-    "signedAt": "2026-09-01T00:00:00Z",
-    "notAfter": "2027-08-31T23:59:59Z"
+    "signedAt": "2026-07-01T00:00:00Z",
+    "notAfter": "2027-12-31T23:59:59Z"
   },
   {
-    "id": "kpost-nts-2026-01",
+    "id": "kpost-mois-2026-01",
     "partyA": "KPOST",
-    "partyB": "NTS",
+    "partyAName": "우정사업본부",
+    "partyB": "MOIS",
+    "partyBName": "행정안전부",
     "gradeMap": { "S": "S", "O": "O" },
     "signedAt": "2026-09-01T00:00:00Z",
     "notAfter": "2027-08-31T23:59:59Z"
@@ -18,9 +22,11 @@
   {
     "id": "kpost-msit-2026-01",
     "partyA": "KPOST",
+    "partyAName": "우정사업본부",
     "partyB": "MSIT",
+    "partyBName": "과학기술정보통신부",
     "gradeMap": { "S": "S", "O": "O" },
     "signedAt": "2026-09-01T00:00:00Z",
-    "notAfter": "2027-08-31T23:59:59Z"
+    "notAfter": "2026-12-31T23:59:59Z"
   }
 ]

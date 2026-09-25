@@ -1,5 +1,5 @@
 import React from 'react'
-import { api } from '../lib/api.js'
+import { api, currentOrg } from '../lib/api.js'
 import { analyzeFile, buildEmbedded, zipAttach, extractTextForIdentify } from '../lib/attach.js'
 import { minhashB64 } from '../lib/fingerprint.js'
 import { orgLabel } from '../lib/orgs.js'
@@ -19,7 +19,7 @@ export default function IssuePage() {
   const [form, setForm] = React.useState({
     grade: 'S', basisClause: '', keywords: '', brmPath: '',
     approvalState: 'CONFIRMED', transform: 'edit', notAfterDays: 365,
-    issuerOrg: '', sign: true, semantic: false
+    issuerOrg: currentOrg(), sign: true, semantic: true // 발급기관 기본값 = 현재 기관 페르소나
   })
   const [issuers, setIssuers] = React.useState([])
   const [issuersErr, setIssuersErr] = React.useState(false)
@@ -94,8 +94,9 @@ export default function IssuePage() {
         const idText = await extractTextForIdentify(file.name, buf)
         if (idText) {
           payload.fingerprint = { minhash: minhashB64(idText) }
-          // 의미 검색(docsim) 옵트인: 본문 텍스트를 서버로 보내 서버가
+          // 의미 검색(docsim, 기본 켬): 본문 텍스트를 서버로 보내 서버가
           // docsim 의미 지문을 계산·저장한다(브라우저는 docsim을 못 돌림).
+          // 끄면 본문은 전송되지 않고 MinHash 지문만 남는다.
           if (form.semantic) payload.text = idText
         }
       } catch { /* 지문 실패해도 발급은 유효 */ }
@@ -146,7 +147,7 @@ export default function IssuePage() {
         {file
           ? <p><b>{file.name}</b> ({(file.size / 1024).toFixed(1)} KB)</p>
           : <p><b>라벨을 붙일 파일을 끌어다 놓으세요</b></p>}
-        <p className="hint">파일 본문은 서버로 전송되지 않습니다 — 해시·지문(단방향)만 전송, 라벨은 브라우저에서 내장 (단, 아래 '의미 검색(docsim)'을 켜면 그때만 본문 텍스트가 전송됩니다)</p>
+        <p className="hint">해시·지문(단방향)은 브라우저가 계산하고 라벨은 브라우저에서 내장합니다. 기본 켜진 '의미 검색(docsim 讀心)'은 본문 텍스트를 서버로 보내 의미 지문을 만들며(본문은 저장하지 않음), 끄면 본문이 전송되지 않습니다.</p>
         <input ref={fileRef} type="file" hidden onChange={(e) => { setFile(e.target.files[0]); setDone(null) }} />
       </div>
 
@@ -176,16 +177,16 @@ export default function IssuePage() {
               <option value="0">서명 없이 원장 등록만</option>
             </select>
           </label>
-          <label>의미 검색(docsim)
+          <label>의미 검색(docsim 讀心)
             <select value={form.semantic ? '1' : '0'} onChange={(e) => setForm({ ...form, semantic: e.target.value === '1' })}>
-              <option value="0">끔 (본문 미전송 · 기본)</option>
-              <option value="1">켬 — 본문 텍스트 전송(서버가 의미 지문 계산)</option>
+              <option value="1">켬 (기본) — 본문 텍스트 전송, 서버가 의미 지문 계산</option>
+              <option value="0">끔 — 본문 미전송, MinHash 지문만</option>
             </select>
-            {form.semantic && (
-              <span className="hint" style={{ display: 'block', marginTop: 4 }}>
-                켜면 재작성문까지 의미로 재식별됩니다. 이 경우에만 본문 텍스트가 서버로 전송됩니다.
-              </span>
-            )}
+            <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+              {form.semantic
+                ? '재작성문까지 의미로 재식별됩니다. 본문 텍스트가 서버로 전송되지만 저장되지는 않습니다.'
+                : '의미 재식별이 되지 않습니다 — 수정본·변환본만 MinHash로 찾습니다.'}
+            </span>
           </label>
         </div>
         <h2>라벨 필드</h2>

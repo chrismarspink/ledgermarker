@@ -1,26 +1,72 @@
 import React from 'react'
 import { api } from '../lib/api.js'
 import { analyzeFile, extractTextForIdentify } from '../lib/attach.js'
+import LaneChart from './ledger/LaneChart.jsx'
+import LedgerGraph from './ledger/LedgerGraph.jsx'
+import Taxonomy from './ledger/Taxonomy.jsx'
+import PassportMap from './ledger/PassportMap.jsx'
+import Stamps from './ledger/Stamps.jsx'
 
 // 원장 열람 — 파일 해시가 기록되는 추가 전용 레지스트리(대장).
 // 읽기 전용이다: 어떤 경로로도 수정·삭제되지 않는다 (불변식 1).
+//
+// 시각화 5종은 같은 데이터 묶음(events·checkpoints·observations·treaties·issuers)을
+// 한 번 읽어 탭으로 나눠 그린다. 이벤트는 발급 측 진실(원장), 관측 로그는 게이트가
+// 보고한 기관 간 이동·검증 기록으로 서로 다른 출처다.
+const TABS = [
+  ['table', '표'],
+  ['lane', '레인 차트'],
+  ['graph', '전체 그래프'],
+  ['taxonomy', '분류·온톨로지'],
+  ['passport', '기관 지도'],
+  ['stamps', '기관 간 흐름']
+]
+
 export default function LedgerPage() {
   const [apiKey, setApiKey] = React.useState(localStorage.getItem('lm-api-key') || '')
-  const [limit, setLimit] = React.useState(50)
-  const [ledger, setLedger] = React.useState(null)
+  const [limit, setLimit] = React.useState(500)
+  const [data, setData] = React.useState(null)
   const [error, setError] = React.useState('')
+  // 탭: ?tab= 쿼리 > 마지막 선택 > 표
+  const [tab, setTab] = React.useState(new URLSearchParams(window.location.search).get('tab') || localStorage.getItem('lm-ledger-tab') || 'table')
+  const [loading, setLoading] = React.useState(false)
+  const [sample, setSample] = React.useState(null) // 샘플 로딩 결과 {busy, report, error}
 
   async function load() {
-    setError('')
+    setError(''); setLoading(true)
     try {
       localStorage.setItem('lm-api-key', apiKey)
-      setLedger(await api.ledgerEvents(apiKey, limit))
+      const soft = (p) => p.catch(() => null) // 선택 데이터(협정 미구성 등)는 비어도 화면은 그린다
+      const [ledger, ck, obs, tr, keys] = await Promise.all([
+        api.ledgerEvents(apiKey, limit), soft(api.checkpoints()), soft(api.observations({}, apiKey)),
+        soft(api.treaties()), soft(api.keys())
+      ])
+      setData({
+        events: ledger.events, tip: ledger.tip, from: ledger.from, to: ledger.to,
+        checkpoints: ck?.checkpoints || [], observations: obs?.observations || [],
+        treaties: tr?.treaties || [], issuers: keys?.issuers || []
+      })
     } catch (e) {
       setError(e.message)
+    } finally {
+      setLoading(false)
     }
   }
-  React.useEffect(() => { load() }, [])
+  React.useEffect(() => { load() }, [limit])
+  function pick(t) { setTab(t); localStorage.setItem('lm-ledger-tab', t) }
 
+  async function loadSamples() {
+    setSample({ busy: true })
+    try {
+      const report = await api.loadSamples(apiKey)
+      setSample({ report })
+      await load()
+    } catch (e) {
+      setSample({ error: e.message })
+    }
+  }
+
+  const ledger = data
   return (
     <div>
       <h2>원장 (대장)</h2>
@@ -29,19 +75,48 @@ export default function LedgerPage() {
         수정·삭제는 불가능하며, 행마다 해시 체인(prevHash→rowHash)으로 봉인됩니다.
       </p>
 
-      <ReindexPanel apiKey={apiKey} />
+      <div className="tabs">
+        {TABS.map(([id, label]) => (
+          <button key={id} className={tab === id ? 'tab on' : 'tab'} onClick={() => pick(id)}>{label}</button>
+        ))}
+        <span style={{ flexGrow: 1 }} />
+        <button className="pick" onClick={loadSamples} disabled={sample?.busy}
+          title="서버의 샘플 폴더(LM_SAMPLE_DIR)의 manifest 대로 파일을 일괄 발급하고 이벤트·기관 간 관측을 기록합니다. 여러 번 눌러도 중복되지 않습니다.">
+          {sample?.busy ? '샘플 로딩 중… (의미 지문 계산 포함, 1~2분)' : '샘플 파일 로딩 (기능테스트)'}
+        </button>
+      </div>
+      {sample?.error && <p className="error">샘플 로딩 실패: {sample.error}</p>}
+      {sample?.report && (
+        <details className="card" style={{ padding: '10px 18px' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+            샘플 로딩 완료 — 발급 {sample.report.issued} · 이벤트 {sample.report.events} · 관측 {sample.report.observations}
+            · 건너뜀 {sample.report.skipped} · 실패 <b style={{ color: sample.report.failed ? 'var(--bad)' : 'inherit' }}>{sample.report.failed}</b>
+          </summary>
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--muted)', margin: '8px 0 0' }}>{(sample.report.log || []).join('\n')}</pre>
+        </details>
+      )}
 
       <p className="hint">
-        표시 행 수:{' '}
+        읽는 행 수:{' '}
         <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-          {[20, 50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
+          {[50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         {' '}· API 키 (서버에 설정된 경우만):{' '}
         <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
         {' '}<button className="link" onClick={load}>새로고침</button>
+        {loading && <span> · 불러오는 중…</span>}
+        {data && <span> · tip #{data.tip} · 봉인 {data.checkpoints.length}회 · 관측 {data.observations.length}건 · 협정 {data.treaties.length}건</span>}
       </p>
       {error && <p className="error">{error}</p>}
-      <div className="card">
+
+      {tab === 'lane' && data && <LaneChart data={data} />}
+      {tab === 'graph' && data && <LedgerGraph data={data} />}
+      {tab === 'taxonomy' && data && <Taxonomy data={data} />}
+      {tab === 'passport' && data && <PassportMap data={data} />}
+      {tab === 'stamps' && data && <Stamps data={data} />}
+
+      {tab === 'table' && <ReindexPanel apiKey={apiKey} />}
+      {tab === 'table' && <div className="card">
         <h2>
           이벤트 목록
           {ledger && <span className="hint"> — tip #{ledger.tip}, seq {ledger.from}~{ledger.to} (최신순)</span>}
@@ -75,7 +150,7 @@ export default function LedgerPage() {
           docGuid·해시 전체 값은 셀에 마우스를 올리면 표시됩니다.
           체인 무결성 점검은 <code>lm ledger verify</code>, 원문 전체는 <code>lm ledger list --json</code>.
         </p>
-      </div>
+      </div>}
     </div>
   )
 }
