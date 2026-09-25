@@ -6,6 +6,11 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      space:
+        description: '대상 Space (계정/이름). 새 Docker Space 생성은 PRO 가 필요하므로 기존 Space 를 재사용할 수 있다'
+        default: chrismarspink/ledgermarker
+        required: true
 concurrency:
   group: hf-space
   cancel-in-progress: true
@@ -22,6 +27,7 @@ jobs:
       - name: Space 로 업로드
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SPACE: ${{ inputs.space || 'chrismarspink/ledgermarker' }}
         run: |
           set -e
           test -n "$HF_TOKEN" || { echo "secret HF_TOKEN 이 없어 Space 동기화를 건너뜁니다 (gh secret set HF_TOKEN)"; exit 0; }
@@ -31,4 +37,4 @@ jobs:
           cp deploy/hf/Dockerfile /tmp/space/Dockerfile
           # Space 는 README 머리말(YAML)로 SDK·포트를 읽는다 — 저장소 README 앞에 붙인다.
           { cat deploy/hf/README-space.md; echo; cat README.md; } > /tmp/space/README.md
-          python deploy/hf/upload_space.py /tmp/space
+          python deploy/hf/upload_space.py /tmp/space "$SPACE"
