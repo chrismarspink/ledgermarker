@@ -1,4 +1,4 @@
-# master 푸시마다 Hugging Face Docker Space(chrismarspink/ledgermarker)에 저장소를 동기화한다.
+# master 푸시마다 Hugging Face Docker Space(chrismarspink/hetest — 신규 Docker Space 생성은 PRO 필요라 기존 Space 재사용)에 저장소를 동기화한다.
 # Space 는 deploy/hf/Dockerfile 로 단일 컨테이너(PG + lmserver + 웹 + docsim)를 빌드해 7860 포트로 서비스한다.
 # 필요한 것: GitHub 저장소 secret HF_TOKEN (huggingface.co/settings/tokens 의 write 토큰). Space 가 없으면 만든다.
 name: hf-space
@@ -9,7 +9,7 @@ on:
     inputs:
       space:
         description: '대상 Space (계정/이름). 새 Docker Space 생성은 PRO 가 필요하므로 기존 Space 를 재사용할 수 있다'
-        default: chrismarspink/ledgermarker
+        default: chrismarspink/hetest
         required: true
 concurrency:
   group: hf-space
@@ -27,7 +27,7 @@ jobs:
       - name: Space 로 업로드
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          SPACE: ${{ inputs.space || 'chrismarspink/ledgermarker' }}
+          SPACE: ${{ inputs.space || 'chrismarspink/hetest' }}
         run: |
           set -e
           test -n "$HF_TOKEN" || { echo "secret HF_TOKEN 이 없어 Space 동기화를 건너뜁니다 (gh secret set HF_TOKEN)"; exit 0; }

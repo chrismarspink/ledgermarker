@@ -8,7 +8,7 @@ import sys
 from huggingface_hub import HfApi
 
 folder = sys.argv[1]
-repo = sys.argv[2] if len(sys.argv) > 2 else "chrismarspink/ledgermarker"
+repo = sys.argv[2] if len(sys.argv) > 2 else "chrismarspink/hetest"
 api = HfApi(token=os.environ["HF_TOKEN"])
 api.create_repo(repo, repo_type="space", space_sdk="docker", exist_ok=True)
 # delete_patterns="*": Space 를 저장소와 같은 내용으로 맞춘다(지운 파일도 반영).
