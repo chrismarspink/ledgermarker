@@ -1,0 +1,773 @@
+{
+ "steps": [
+  {
+   "type": "issue",
+   "id": "reg",
+   "file": "우정사업본부/총무/문서관리규정.docx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "총무/문서관리",
+   "basisClause": 5,
+   "keywords": [
+    "내부규정",
+    "보존5년"
+   ],
+   "semantic": true
+  },
+  {
+   "type": "issue",
+   "id": "weekly",
+   "file": "우정사업본부/기획/주간보고_9월3주.md",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "기획/주간보고",
+   "keywords": [
+    "주간보고"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "contract",
+   "file": "우정사업본부/재무/물류위탁계약서.docx",
+   "grade": "C",
+   "issuerOrg": "KPOST",
+   "brmPath": "재무/계약",
+   "basisClause": 7,
+   "keywords": [
+    "계약서",
+    "영업기밀"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "press",
+   "file": "우정사업본부/홍보/보도자료_우편요금개편.txt",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "홍보/보도",
+   "keywords": [
+    "보도자료"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "reg_rev",
+   "file": "우정사업본부/총무/문서관리규정_개정안.docx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "총무/문서관리",
+   "basisClause": 5,
+   "keywords": [
+    "내부규정",
+    "보존5년"
+   ],
+   "semantic": true,
+   "parent": "reg",
+   "transform": "edit"
+  },
+  {
+   "type": "issue",
+   "id": "report",
+   "file": "우정사업본부/기획/보안등급운영보고서_2026.docx",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "기획/성과관리",
+   "keywords": [
+    "연차보고"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "report_pdf",
+   "file": "우정사업본부/기획/보안등급운영보고서_2026.pdf",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "기획/성과관리",
+   "keywords": [
+    "연차보고"
+   ],
+   "parent": "report",
+   "transform": "convert"
+  },
+  {
+   "type": "checkpoint"
+  },
+  {
+   "type": "issue",
+   "id": "hire",
+   "file": "우정사업본부/인사/채용계획_2026하반기.pptx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "인사/채용",
+   "basisClause": 6,
+   "keywords": [
+    "개인정보"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "applicants",
+   "file": "우정사업본부/인사/지원자명부.csv",
+   "grade": "C",
+   "issuerOrg": "KPOST",
+   "brmPath": "인사/채용",
+   "basisClause": 6,
+   "keywords": [
+    "개인정보"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "price",
+   "file": "우정사업본부/재무/계약단가표.xlsx",
+   "grade": "C",
+   "issuerOrg": "KPOST",
+   "brmPath": "재무/계약",
+   "basisClause": 7,
+   "keywords": [
+    "영업기밀"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "privacy",
+   "file": "우정사업본부/총무/개인정보처리방침_v3.docx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "총무/개인정보",
+   "basisClause": 6,
+   "keywords": [
+    "개인정보",
+    "보존5년"
+   ],
+   "semantic": true
+  },
+  {
+   "type": "issue",
+   "id": "minutes",
+   "file": "우정사업본부/기획/정보화추진회의록.docx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "기획/정보화",
+   "basisClause": 5,
+   "keywords": [
+    "회의록"
+   ],
+   "approvalState": "PROVISIONAL"
+  },
+  {
+   "type": "issue",
+   "id": "weekly2",
+   "file": "우정사업본부/기획/주간보고_9월4주.md",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "기획/주간보고",
+   "keywords": [
+    "주간보고"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "press2",
+   "file": "우정사업본부/홍보/보도자료_스마트우체국.md",
+   "grade": "O",
+   "issuerOrg": "KPOST",
+   "brmPath": "홍보/보도",
+   "keywords": [
+    "보도자료"
+   ]
+  },
+  {
+   "type": "regrade",
+   "doc": "reg_rev",
+   "grade": "O",
+   "reason": "공개 심의 통과 (2026-11-14 정보공개심의회)"
+  },
+  {
+   "type": "revoke",
+   "doc": "weekly",
+   "reason": "오기재 — 9월 4주 보고로 대체"
+  },
+  {
+   "type": "issue",
+   "id": "inno_manual",
+   "file": "이노티움/LedgerMarker_운영매뉴얼.md",
+   "grade": "O",
+   "issuerOrg": "INNOTIUM",
+   "brmPath": "개발/문서",
+   "keywords": [
+    "매뉴얼"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "inno_spec",
+   "file": "이노티움/제품기능명세서.docx",
+   "grade": "S",
+   "issuerOrg": "INNOTIUM",
+   "brmPath": "개발/설계",
+   "basisClause": 7,
+   "keywords": [
+    "영업기밀"
+   ],
+   "semantic": true
+  },
+  {
+   "type": "issue",
+   "id": "inno_summary",
+   "file": "이노티움/제품기능명세_요약.txt",
+   "grade": "S",
+   "issuerOrg": "INNOTIUM",
+   "brmPath": "개발/설계",
+   "basisClause": 7,
+   "keywords": [
+    "영업기밀"
+   ],
+   "semantic": true,
+   "parent": "inno_spec",
+   "transform": "extract"
+  },
+  {
+   "type": "issue",
+   "id": "mois_guide",
+   "file": "행정안전부/공공기관_보안업무지침.docx",
+   "grade": "S",
+   "issuerOrg": "MOIS",
+   "brmPath": "정책/보안",
+   "basisClause": 5,
+   "keywords": [
+    "지침"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "mois_notice",
+   "file": "행정안전부/공지_국민신문고_운영.txt",
+   "grade": "O",
+   "issuerOrg": "MOIS",
+   "brmPath": "민원/공지"
+  },
+  {
+   "type": "issue",
+   "id": "nts_form",
+   "file": "국세청/종합소득세_신고안내.md",
+   "grade": "O",
+   "issuerOrg": "NTS",
+   "brmPath": "세정/안내"
+  },
+  {
+   "type": "issue",
+   "id": "nts_audit",
+   "file": "국세청/세무조사_계획_4분기.docx",
+   "grade": "C",
+   "issuerOrg": "NTS",
+   "brmPath": "세정/조사",
+   "basisClause": 4,
+   "keywords": [
+    "조사계획"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "msit_plan",
+   "file": "과학기술정보통신부/디지털플랫폼정부_추진계획.docx",
+   "grade": "S",
+   "issuerOrg": "MSIT",
+   "brmPath": "정책/디지털",
+   "basisClause": 5,
+   "keywords": [
+    "추진계획"
+   ]
+  },
+  {
+   "type": "issue",
+   "id": "msit_stats",
+   "file": "과학기술정보통신부/ICT_통계자료_2026.csv",
+   "grade": "O",
+   "issuerOrg": "MSIT",
+   "brmPath": "통계/공개"
+  },
+  {
+   "type": "destroy",
+   "doc": "contract",
+   "reason": "계약 종료 후 보존기간 만료 — 파기 심의 2026-09-30"
+  },
+  {
+   "type": "issue",
+   "id": "privacy_rev",
+   "file": "우정사업본부/총무/개인정보처리방침_v4.docx",
+   "grade": "S",
+   "issuerOrg": "KPOST",
+   "brmPath": "총무/개인정보",
+   "basisClause": 6,
+   "keywords": [
+    "개인정보",
+    "보존5년"
+   ],
+   "semantic": true,
+   "parent": "privacy",
+   "transform": "edit"
+  },
+  {
+   "type": "checkpoint"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-02T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-02T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-10-05T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-10-05T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "NTS",
+   "at": "2026-10-06T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "press",
+   "from": "KPOST",
+   "to": "NTS",
+   "at": "2026-10-06T09:05:00Z",
+   "treaty": "no_treaty",
+   "verdictHint": "review",
+   "note": "우정-국세청 협정 없음 — 서명 진위만 확인"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-08T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-08T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "mois_guide",
+   "from": "MOIS",
+   "to": "KPOST",
+   "at": "2026-10-12T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "mois_guide",
+   "from": "MOIS",
+   "to": "KPOST",
+   "at": "2026-10-12T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "mois_guide",
+   "from": "MOIS",
+   "to": "NTS",
+   "at": "2026-10-13T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "mois_guide",
+   "from": "MOIS",
+   "to": "NTS",
+   "at": "2026-10-13T09:05:00Z",
+   "treaty": "no_treaty",
+   "verdictHint": "review",
+   "note": "행안부-국세청 협정 없음 — 서명 진위만 확인"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "hire",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-15T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "hire",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-15T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "contract",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-20T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "contract",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-10-20T09:05:00Z",
+   "treaty": "not_translatable",
+   "verdictHint": "deny",
+   "note": "C(비밀)은 기관 내부 전용 — 반출 차단"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "msit_plan",
+   "from": "MSIT",
+   "to": "KPOST",
+   "at": "2026-10-20T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "msit_plan",
+   "from": "MSIT",
+   "to": "KPOST",
+   "at": "2026-10-20T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "NTS",
+   "at": "2026-10-29T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "NTS",
+   "at": "2026-10-29T09:05:00Z",
+   "treaty": "no_treaty",
+   "verdictHint": "review",
+   "note": "협정 없음 — 서명 진위만 확인, 등급 미번역"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "hire",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2026-10-30T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "hire",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2026-10-30T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "review",
+   "translatedGrade": "S",
+   "note": "반출 승인자 확인 대기"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "minutes",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-11-02T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "minutes",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-11-02T09:05:00Z",
+   "treaty": "not_translatable",
+   "verdictHint": "deny",
+   "note": "PROVISIONAL 라벨은 기관 내부 통행 전용"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2026-11-05T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2026-11-05T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S",
+   "note": "과제 협력 협정(kpost-innotium-2026-01)으로 번역"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "nts_form",
+   "from": "NTS",
+   "to": "KPOST",
+   "at": "2026-11-10T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "nts_form",
+   "from": "NTS",
+   "to": "KPOST",
+   "at": "2026-11-10T09:05:00Z",
+   "treaty": "no_treaty",
+   "verdictHint": "review"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "inno_manual",
+   "from": "INNOTIUM",
+   "to": "KPOST",
+   "at": "2026-11-20T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "inno_manual",
+   "from": "INNOTIUM",
+   "to": "KPOST",
+   "at": "2026-11-20T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "inno_spec",
+   "from": "INNOTIUM",
+   "to": "KPOST",
+   "at": "2026-12-05T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "inno_spec",
+   "from": "INNOTIUM",
+   "to": "KPOST",
+   "at": "2026-12-05T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "weekly",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-11-25T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "weekly",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-11-25T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "deny",
+   "translatedGrade": "O",
+   "note": "폐기된 라벨 — 원장 REVOKE 확인"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "privacy_rev",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-12-01T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "privacy_rev",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2026-12-01T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "S"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "press2",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-12-10T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "press2",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-12-10T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-12-22T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2026-12-22T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "msit_plan",
+   "from": "MSIT",
+   "to": "KPOST",
+   "at": "2027-01-15T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "msit_plan",
+   "from": "MSIT",
+   "to": "KPOST",
+   "at": "2027-01-15T09:05:00Z",
+   "treaty": "expired",
+   "verdictHint": "review",
+   "note": "KPOST-MSIT 협정 2026-12-31 만료"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2027-02-16T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "reg_rev",
+   "from": "KPOST",
+   "to": "MSIT",
+   "at": "2027-02-16T09:05:00Z",
+   "treaty": "expired",
+   "verdictHint": "review",
+   "note": "협정 만료 후 — 서명만 확인"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "report_pdf",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2027-02-20T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "report_pdf",
+   "from": "KPOST",
+   "to": "INNOTIUM",
+   "at": "2027-02-20T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  },
+  {
+   "type": "observe",
+   "kind": "SENT",
+   "doc": "press2",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2027-03-03T09:00:00Z"
+  },
+  {
+   "type": "observe",
+   "kind": "VERIFIED",
+   "doc": "press2",
+   "from": "KPOST",
+   "to": "MOIS",
+   "at": "2027-03-03T09:05:00Z",
+   "treaty": "translated",
+   "verdictHint": "allow",
+   "translatedGrade": "O"
+  }
+ ]
+}

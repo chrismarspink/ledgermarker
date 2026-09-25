@@ -1,0 +1,8 @@
+{
+  "mu_version": "mu-0d30f4981b31",
+  "model_id": "jhgan/ko-sroberta-multitask",
+  "dim": 768,
+  "n_chunks": 5919,
+  "n_docs": 1200,
+  "created_at": "2026-09-08T22:03:02+00:00"
+}

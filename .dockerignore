@@ -1,0 +1,8 @@
+bin/
+verify-pwa/node_modules/
+verify-pwa/dist/
+verify-pwa/public/v1/
+.git/
+**/__pycache__/
+*.lmsig
+.DS_Store

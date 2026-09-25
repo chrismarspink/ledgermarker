@@ -37,7 +37,7 @@ exec env \
   LM_KEYSTORE=./keystore \
   LM_ISSUERS="INNOTIUM:이노티움:./keystore-innotium,MOIS:행정안전부:./keystore-partners/MOIS,NTS:국세청:./keystore-partners/NTS,MSIT:과학기술정보통신부:./keystore-partners/MSIT" \
   LM_TREATIES=./deploy/treaties.demo.json \
-  LM_SAMPLE_DIR="$(pwd)/../sample" \
+  LM_SAMPLE_DIR="$(pwd)/sample" \
   LM_REGRADE_TOKEN=demo-regrade \
   LM_DESTROY_TOKEN=demo-destroy \
   LM_DOCSIM="$HOME/docsim/.venv/bin/docsim" \

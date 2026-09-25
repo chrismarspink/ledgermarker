@@ -130,6 +130,7 @@ func main() {
 		Treaty:               treatySvc,
 		DocsimBin:            docsimBin(),
 		SampleDir:            os.Getenv("LM_SAMPLE_DIR"),
+		WebDir:               os.Getenv("LM_WEB_DIR"), // 빌드된 PWA 를 같은 주소에서 서비스(단일 서버 데모)
 		DocsimDir:            docsimDir(docsimBin()),
 		Logger:               log,
 		RefreshView:          refresh,

@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -52,6 +55,10 @@ type Config struct {
 	// SampleDir: 기능 테스트용 샘플 폴더(manifest.json 포함, 선택). 설정되면
 	// POST /v1/admin/load-samples 가 샘플을 일괄 발급해 원장을 채운다.
 	SampleDir string
+	// WebDir: 빌드된 PWA(verify-pwa/dist) 폴더(선택). 설정되면 /v1 밖의 경로를 정적 파일로
+	// 서비스하고, 없는 경로는 index.html 로 돌린다(SPA 라우팅). 웹과 API 를 한 주소·한
+	// 프로세스로 묶는 단일 서버 데모(Hugging Face Space 등)용이다.
+	WebDir string
 	Logger               *slog.Logger
 	// RefreshView 는 쓰기 후 current_label 구체화 뷰 갱신 훅(선택)이다.
 	RefreshView func(ctx context.Context) error
@@ -159,7 +166,31 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/observations", s.auth(s.handleObserve))
 	mux.HandleFunc("GET /v1/observations", s.auth(s.handleObservations))
 
+	if s.cfg.WebDir != "" {
+		mux.Handle("/", s.spaHandler())
+	}
+
 	return s.cors(mux)
+}
+
+// spaHandler 는 WebDir 의 정적 파일을 내주고, 파일이 없으면 index.html 을 준다 —
+// /ledger 같은 클라이언트 라우트를 새로고침해도 PWA 가 뜨게 한다. /v1 은 API 전용이라
+// 매칭되지 않은 /v1 경로는 404 로 남긴다(정적 파일로 오해하지 않도록).
+func (s *Server) spaHandler() http.Handler {
+	fs := http.FileServer(http.Dir(s.cfg.WebDir))
+	index := filepath.Join(s.cfg.WebDir, "index.html")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/") {
+			writeErr(w, http.StatusNotFound, "not found")
+			return
+		}
+		p := filepath.Join(s.cfg.WebDir, filepath.FromSlash(path.Clean("/"+r.URL.Path)))
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			fs.ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, index)
+	})
 }
 
 // auth 는 API Key 검사 미들웨어다. 키가 구성되지 않았으면 통과(개발 모드).

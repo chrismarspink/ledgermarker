@@ -1,0 +1,34 @@
+# master 푸시마다 Hugging Face Docker Space(chrismarspink/ledgermarker)에 저장소를 동기화한다.
+# Space 는 deploy/hf/Dockerfile 로 단일 컨테이너(PG + lmserver + 웹 + docsim)를 빌드해 7860 포트로 서비스한다.
+# 필요한 것: GitHub 저장소 secret HF_TOKEN (huggingface.co/settings/tokens 의 write 토큰). Space 가 없으면 만든다.
+name: hf-space
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+concurrency:
+  group: hf-space
+  cancel-in-progress: true
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'chrismarspink/ledgermarker' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q huggingface_hub
+      - name: Space 로 업로드
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -e
+          test -n "$HF_TOKEN" || { echo "secret HF_TOKEN 이 없어 Space 동기화를 건너뜁니다 (gh secret set HF_TOKEN)"; exit 0; }
+          rm -rf /tmp/space && mkdir -p /tmp/space
+          rsync -a --exclude .git --exclude .github --exclude verify-pwa/node_modules --exclude verify-pwa/dist \
+            --exclude verify-pwa/public/v1 --exclude bin ./ /tmp/space/
+          cp deploy/hf/Dockerfile /tmp/space/Dockerfile
+          # Space 는 README 머리말(YAML)로 SDK·포트를 읽는다 — 저장소 README 앞에 붙인다.
+          { cat deploy/hf/README-space.md; echo; cat README.md; } > /tmp/space/README.md
+          python deploy/hf/upload_space.py /tmp/space

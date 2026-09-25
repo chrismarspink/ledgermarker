@@ -1,0 +1,85 @@
+schema_version: 1
+norm_version: norm-1.0
+
+shingle:
+  k: 9                       # 문자 k-gram. 한국어 기준. 게이트5 결과로 조정
+  hmac_key_id: docsim-dev-01 # 실제 키는 DOCSIM_HMAC_KEY 환경변수 (없으면 hmac_key_file)
+  hmac_key_file: null        # 환경변수가 없을 때 읽는 키 파일 경로
+  minhash:
+    perms: 128               # stderr ≈ 1/sqrt(128) ≈ 0.088
+    seed: 20260101           # 변경 시 기존 지문 전부 무효
+  df:
+    enabled: false
+    cutoff: 0.4              # DF > 0.4*N 슁글 제외
+    table: null
+
+embed:
+  model_id: jhgan/ko-sroberta-multitask
+  chunk_tokens: 120          # ★ max_seq_length 이하여야 함 (R5, 기동 시 검증)
+  overlap_ratio: 0.25
+  mu_path: ./mu.npy          # ★ 없으면 기동 거부 (R6)
+  sbert_gate_margin: 0.25    # verify_sbert: pos-neg 평균 코사인 차이 하한
+  device: auto               # auto | cpu | mps | cuda. auto = mps/cuda 가 있으면 사용 (실측: mps 48 vs cpu 34 chunk/s, 비트 차이 0)
+  torch_threads: 6           # CPU 인코딩 스레드 수 (0 = torch 기본값). 8코어 실측: 4→59, 6→67 chunk/s
+  quant:
+    store_int8: true         # 재정렬용. 용량 부담 시 false
+  rerank:
+    enabled: true
+    topk: 100
+  top_pairs: 5               # 결과에 표시할 상위 청크쌍 수
+  boilerplate:
+    enabled: false
+    centroid_path: null
+    threshold: 0.90
+  mu:
+    min_chunks_warn: 5000    # 미만이면 경고
+    min_chunks_reject: 1000  # 미만이면 거부
+  bit_balance:
+    saturation_low: 0.05     # 1-비율 < 이 값이면 포화 차원
+    saturation_high: 0.95
+    max_saturated_ratio: 0.10
+
+registry:
+  path: ./reg
+  lsh:
+    bands: 16
+    rows: 8                  # bands * rows == minhash.perms
+
+compare:
+  noise_floor_multiplier: 2.0  # jaccard < 2*stderr 이면 경고
+
+eval:
+  target_fprs: [0.01, 0.05, 0.10]
+  decision_fpr: 0.05           # "검출" 판정에 쓰는 임계값의 목표 FPR
+  min_same_form_ratio: 0.15    # same_form_unrelated 비율 하한 (미만 경고)
+
+output:
+  unsafe_dump_text: false      # ★ R10 — 기본 false
+
+verdict:                       # 관계 판정 (규칙 기반 해석). 임계값은 eval 리포트 (c) 표를 보고 조정한다
+  enabled: true
+  jaccard_near_dup: 0.70       # 이상: 개정판/추가 (문자 조각 대부분 겹침)
+  jaccard_related: 0.20        # 이상: 일부 유사 (eval FPR 5% 임계값 0.203 기준)
+  containment_excerpt: 0.80    # 한 방향 포함도 이상: 발췌/추가
+  containment_asym: 0.15       # 양방향 포함도 차이 이상이면 방향 있음
+  cosine_rewrite: 0.83         # 이상: 재작성 (eval FPR 5% 임계값 0.826 기준)
+  cosine_partial: 0.75         # 이상: 일부 유사
+
+extract:
+  ocr:
+    enabled: true              # 텍스트 레이어가 없는(스캔) PDF 페이지를 OCR 한다
+    engine: auto               # auto | vision (macOS) | tesseract | none
+    dpi: 200                   # 페이지 렌더링 해상도
+    languages: [ko-KR, en-US]  # Vision 언어 코드 (tesseract 로는 kor/eng 로 매핑)
+    min_chars_per_page: 20     # 이 미만이면 텍스트 레이어가 없는 페이지로 간주하고 OCR
+
+server:
+  encode_batch_size: 16        # 임베딩 배치 크기 (진행률 갱신 단위; 실측 8→66, 16→73 chunk/s)
+  job_ttl_sec: 600             # 완료된 비교 작업 결과를 메모리에 보관하는 시간
+  fingerprint_cache_size: 256  # 지문 캐시 항목 수 (hash_norm 키, 원문 미저장). 0 = 비활성
+
+search:                        # "폴더에서 유사 문서 찾기" 도구
+  cache_dir: ~/.cache/docsim/fp-cache   # 폴더 파일 지문 캐시 (지문만 저장, 원문 없음). null 이면 메모리만
+  max_files: 2000              # 한 번에 스캔할 최대 파일 수
+  default_top: 30
+  hide_unrelated: false        # 기본으로 '무관' 판정 행 숨김

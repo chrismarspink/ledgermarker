@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docsim"
+version = "0.1.0"
+description = "두 문서의 유사도를 독립된 두 엔진(shingle / embed)으로 각각 계산해 나란히 비교하는 모듈"
+requires-python = ">=3.10"
+dependencies = [
+  "sentence-transformers>=3.0",
+  "numpy>=1.24",
+  "pyyaml",
+  "click",
+]
+
+[project.optional-dependencies]
+formats = ["python-docx", "pypdf", "olefile"]   # Phase 4
+ocr = [                                          # 스캔 PDF 폴백 (텍스트 레이어 없는 페이지)
+  "pypdfium2", "pillow",
+  "pyobjc-framework-Vision; sys_platform == 'darwin'",
+  "pyobjc-framework-Quartz; sys_platform == 'darwin'",
+]
+dev = ["pytest"]
+
+[project.scripts]
+docsim = "docsim.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["docsim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: 실모델을 적재하는 테스트"]
