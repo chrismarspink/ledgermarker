@@ -2,8 +2,27 @@
 // 호출부는 이를 "unavailable"(판단 보류)로 처리해야 하며,
 // 절대 "검증 실패"로 표시하지 않는다 (DEV SPEC §8.1-4).
 const BASE = import.meta.env.VITE_LM_SERVER || ''
+// 정적 데모 모드(GitHub Pages): 서버 없이 조회만 된다. GET 은 빌드에 담긴
+// 스냅샷(public/v1/**.json — scripts/snapshot-static-api.sh 가 데모 서버에서 떠 온
+// 원장·키·협정)을 읽고, 발급·검증·유사도 같은 쓰기·계산 요청은 안내 오류를 던진다.
+export const STATIC_DEMO = !BASE && import.meta.env.VITE_LM_STATIC === '1'
+const STATIC_ROOT = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+
+function staticPath(path) {
+  // 쿼리(limit·필터)는 무시하고 전체 스냅샷을 준다 — /v1/checkpoints 와
+  // /v1/checkpoints/latest 가 공존하도록 파일은 <경로>.json 이다.
+  return STATIC_ROOT + path.split('?')[0] + '.json'
+}
 
 async function req(method, path, body, apiKey, idemKey) {
+  if (STATIC_DEMO) {
+    if (method !== 'GET') {
+      throw new Error('정적 데모(GitHub Pages)에서는 조회만 됩니다 — 발급·검증·유사도 테스트는 lmserver 를 띄워야 합니다')
+    }
+    const resp = await fetch(staticPath(path))
+    if (!resp.ok) throw new Error(resp.status === 404 ? '정적 데모 스냅샷에 없는 항목입니다' : `HTTP ${resp.status}`)
+    return resp.json()
+  }
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
   if (apiKey) headers['X-LM-Key'] = apiKey

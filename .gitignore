@@ -1,9 +1,7 @@
 bin/
 /lm
 /lmserver
-# 기관 키스토어(개인키) — 저장소에 넣지 않는다. run-demo.sh 가 없으면 생성한다.
-keystore/
-keystore-*/
+# 기관 키스토어는 데모용 가상 키라 저장소에 포함한다(2026-09-25 사용자 결정). 실운영 키는 절대 넣지 않는다.
 verify-pwa/node_modules/
 verify-pwa/dist/
 *.lmsig

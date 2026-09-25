@@ -83,7 +83,7 @@ export function InboxPanel() {
     if (!org) { setItems([]); return }
     try {
       const res = await api.observations({ toOrg: org, limit: 500 }, useApiKey())
-      const all = res.observations || []
+      const all = (res.observations || []).filter((o) => o.toOrg === org) // 정적 데모는 필터 없이 전체를 주므로 여기서 거른다
       // 수신함 = 나에게 SENT 된 것 중, 그 이후 같은 문서·같은 발신 기관의 VERIFIED 가 없는 것
       const pending = all.filter((o) => o.kind === 'SENT').filter((s) =>
         !all.some((v) => v.kind === 'VERIFIED' && v.docGuid === s.docGuid && v.fromOrg === s.fromOrg &&
