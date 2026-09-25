@@ -1,0 +1,10 @@
+bin/
+/lm
+/lmserver
+# 기관 키스토어(개인키) — 저장소에 넣지 않는다. run-demo.sh 가 없으면 생성한다.
+keystore/
+keystore-*/
+verify-pwa/node_modules/
+verify-pwa/dist/
+*.lmsig
+.DS_Store

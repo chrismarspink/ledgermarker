@@ -1,0 +1,338 @@
+openapi: 3.0.3
+info:
+  title: LedgerMarker API
+  version: "0.1"
+  description: |
+    LM Server REST API (Phase 1).
+
+    **불변식**
+    1. 원장은 절대 수정·삭제되지 않는다 — 모든 변경은 새 이벤트 행 추가.
+    2. 라벨 등급 필드는 평문 — 게이트가 복호화 없이 읽는다.
+    3. 서버는 문서 본문을 저장하지 않는다 — 해시·메타데이터·서명만.
+    4. 귀속과 판정 분리 — `verdictHint`는 참고값. 통과 여부는 호출자 정책이 정한다.
+servers:
+  - url: /v1
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-LM-Key
+      description: "✎ 운영 인증 방식(mTLS vs API Key) 확정 필요 (DEV SPEC §13-4)"
+  schemas:
+    IssueRequest:
+      type: object
+      required: [contentHash, grade]
+      properties:
+        docGuid: { type: string, format: uuid, description: 없으면 서버가 생성 }
+        contentHash: { type: string, description: hex SHA-256 (64자) }
+        grade: { type: string, enum: [C, S, O], description: 'N2SF 등급 — C(비밀)>S(민감)>O(공개)' }
+        basisClause: { type: integer, minimum: 1, maximum: 8, description: 정보공개법 9조 호수 }
+        basisKeywords: { type: array, items: { type: string } }
+        brmPath: { type: string }
+        approvalState: { type: string, enum: [PROVISIONAL, CONFIRMED], default: CONFIRMED }
+        approverRank: { type: string }
+        disclosureCondition: { type: string, format: date-time }
+        lineage:
+          type: object
+          properties:
+            parentHash: { type: string, description: 직전 버전 hex SHA-256 }
+            transform: { type: string, enum: [edit, convert, merge, extract] }
+        notAfterDays: { type: integer, default: 365 }
+        exportApprover: { type: string }
+        attach:
+          type: object
+          description: 클라이언트가 수행한 부착 결과 보고 (원장에 기록 — 폴백 추적)
+          properties:
+            method: { type: string, enum: [embedded, container, sidecar, ledger_only] }
+            formatId: { type: string, description: formats.yaml id (unknown 포함) }
+            fallbackReason: { type: string, enum: [not_implemented, attach_failed] }
+        fingerprint:
+          type: object
+          description: 내용 유사도 지문 — 수정본·변환본 재식별 색인
+          properties:
+            minhash: { type: string, description: base64(uint64×128 BE) }
+        textHash: { type: string, description: 정규화 본문 텍스트 해시(hex) — 재저장 생존 2차 색인 }
+        docsimFp: { type: string, description: 사내 docsim 정밀 지문(JSON, 원문 복원 불가) — identify --deep 용 }
+        approvalToken: { type: string, description: 파생물을 부모보다 낮은 등급으로 발급 시 필수(상속 규칙) }
+        filename: { type: string, description: 원본 파일명 — 개발·운영 확인용 메타데이터(정체성·검증 무관) }
+        text: { type: string, description: '옵트인 본문 텍스트 — 서버가 docsim 의미 지문 계산에만 사용(저장 안 함). 전달 시 본문이 서버로 전송됨(기본 미전송의 예외).' }
+    IssueResponse:
+      type: object
+      properties:
+        docGuid: { type: string, format: uuid }
+        labelData: { type: string, description: base64 서명 데이터 }
+        ledgerSeq: { type: integer, format: int64 }
+        rootDocId: { type: string, format: uuid }
+        issuedAt: { type: string, format: date-time }
+        notAfter: { type: string, format: date-time }
+        attach:
+          type: object
+          properties:
+            method: { type: string }
+            formatId: { type: string }
+            survivability: { type: string, enum: [A, B, C] }
+            fallbackReason: { type: string }
+    VerifyRequest:
+      type: object
+      required: [contentHash]
+      properties:
+        labelData: { type: string, description: base64 서명 데이터. 없으면 폴백 검증(해시만 조회) }
+        contentHash: { type: string, description: hex SHA-256 — 필수 }
+        textHash: { type: string, description: 정규화 본문 텍스트 해시(hex, 공백 제거) — 재저장·재압축본의 2차 재식별 }
+        level: { type: integer, enum: [1, 2, 3], default: 2, description: 3(협정)은 Phase 2 }
+    VerifyResponse:
+      type: object
+      properties:
+        attribution:
+          type: object
+          description: '"이 문서가 무엇인가" — LM이 답한다'
+          properties:
+            docGuid: { type: string }
+            grade: { type: string }
+            approvalState: { type: string }
+            issuerOrg: { type: string }
+            rootDocId: { type: string }
+            confidence: { type: number, description: 선언적=1.0, 지문추정=0~1(Phase 2) }
+        checks:
+          type: object
+          properties:
+            signature: { type: string, enum: [valid, invalid, absent, untrusted_ca] }
+            ledger:
+              type: string
+              enum: [registered, unregistered, unavailable]
+              description: |
+                unavailable(접속 불가)과 unregistered(조회했으나 없음)를
+                절대 혼동하지 말 것. 전자는 판단 보류, 후자는 미등록 판정.
+            revocation: { type: string, enum: [none, revoked, superseded] }
+            validity: { type: string, enum: [in_window, expired, not_yet] }
+            treaty: { type: string, enum: [present, absent, not_applicable] }
+        translatedGrade: { type: string }
+        verdictHint:
+          type: string
+          enum: [allow, deny, review]
+          description: 참고값일 뿐 — 호출자가 무시할 수 있어야 하며, LM은 차단을 강제하지 않는다
+        reasons: { type: array, items: { type: string } }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+paths:
+  /labels:
+    post:
+      summary: 라벨 발급
+      security: [{ ApiKey: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: 동일 키 재요청 시 동일 응답, 원장 행 1개만 (T12)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IssueRequest' } } }
+      responses:
+        "201":
+          description: 발급 완료
+          content: { application/json: { schema: { $ref: '#/components/schemas/IssueResponse' } } }
+        "400":
+          description: 잘못된 요청 (허용 등급 C/S/O 밖 등)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /labels/{docGuid}/revoke:
+    post:
+      summary: 라벨 폐기 (원장 REVOKE 이벤트 추가 — 삭제 아님)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string } }
+      responses:
+        "200": { description: 폐기 등록 완료 }
+        "404": { description: 원장에 없는 문서 }
+        "409": { description: 이미 폐기됨 }
+  /labels/{docGuid}/regrade:
+    post:
+      summary: 등급 변경 (하향은 approvalToken 필수, 상향은 즉시 + 구 라벨 superseded)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grade]
+              properties:
+                grade: { type: string, enum: [C, S, O] }
+                approvalToken: { type: string, description: 하향 시 필수 }
+                reason: { type: string }
+      responses:
+        "200":
+          description: 새 라벨 발급 (REGRADE 이벤트)
+          content: { application/json: { schema: { $ref: '#/components/schemas/IssueResponse' } } }
+        "403": { description: 하향 승인 토큰 없음/불일치 (T9) }
+  /verify:
+    post:
+      summary: 검증 L1~L2 (게이트·PWA 공용) — 가장 중요한 계약
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VerifyRequest' } } }
+      responses:
+        "200":
+          description: 검증 결과 (귀속 + 5개 체크)
+          content: { application/json: { schema: { $ref: '#/components/schemas/VerifyResponse' } } }
+  /documents/{docGuid}/lineage:
+    get:
+      summary: 계보(족보) 조회 — 선언적 DAG
+      parameters:
+        - { name: docGuid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: depth, in: query, schema: { type: integer, default: 10 } }
+        - { name: direction, in: query, schema: { type: string, enum: [up, down, both], default: both } }
+      responses:
+        "200": { description: 노드·간선 그래프 }
+        "404": { description: 원장에 없는 문서 }
+  /checkpoints/latest:
+    get:
+      summary: 최신 체크포인트 (인증 없이 공개)
+      responses:
+        "200": { description: 체크포인트 }
+        "404": { description: 아직 없음 }
+  /checkpoints:
+    post:
+      summary: 체크포인트 발행 (운영자 전용 — 직전 봉인 이후 ~ tip)
+      security: [{ ApiKey: [] }]
+      responses:
+        "201": { description: 봉인 완료 }
+        "409": { description: 봉인할 신규 구간 없음 }
+  /ledger/verify:
+    get:
+      summary: 해시 체인 무결성 점검 — 조작 지점 seq 지목 (T3)
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: integer, default: 1 } }
+        - { name: to, in: query, schema: { type: integer, description: 0 = tip } }
+      responses:
+        "200":
+          description: '{ok, badSeq, checked}'
+  /identify:
+    post:
+      summary: 지문 유사도 재식별 — 수정본·변환본의 원본 후보 (추정, 판정 아님)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minhash]
+              properties:
+                minhash: { type: string, description: base64(uint64×128 BE) }
+                limit: { type: integer, default: 5, maximum: 20 }
+                minSimilarity: { type: number, default: 0.3 }
+      responses:
+        "200": { description: "candidates[] (docGuid·similarity·grade·docsimFp 등, 유사도 내림차순)" }
+  /restore:
+    post:
+      summary: 정체성 복원(재수화) — 저항 사다리(해시→텍스트해시→지문)를 한 호출로
+      description: |
+        유출·변형된 파일의 정체성을 되살린다.
+        - content hash 일치 → 원본 서명 라벨 회수 (mode=exact)
+        - text hash 일치 → 재저장·형식 변환본의 원본 라벨 회수 (mode=text)
+        - 지문 유사도 → 원본 후보 식별 (mode=review); apply=true & 유사도 충분 시
+          원본 귀속(File ID 계보·등급·태그)을 상속한 새 라벨 발급 (mode=inherited)
+
+        exact·text는 원본 라벨을 그대로 되살린다. inherited는 수정본 자신의 해시에
+        결속된 새 서명 라벨을 발급하되 원본 귀속을 승계한다 — 수정본에 원본 라벨을
+        재부착하면 해시 불일치로 서명이 깨지기 때문이다. 본문 자체는 저장·복원하지
+        않는다(불변식 3) — 되살아난 File ID로 ECM 정본을 회수하는 것은 호출자 몫.
+      security: [{ ApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contentHash]
+              properties:
+                contentHash: { type: string, description: 파일 자신의 hex SHA-256 (필수) }
+                textHash: { type: string, description: 정규화 본문 텍스트 해시 (2차 식별) }
+                minhash: { type: string, description: base64 지문 — 유사도 재식별 }
+                minSimilarity: { type: number, default: 0.3 }
+                apply: { type: boolean, default: false, description: true면 유사도 충분 시 상속 라벨 발급 }
+                issuerOrg: { type: string }
+      responses:
+        "200": { description: "{mode: exact|text|review|not_found, docGuid, grade, labelData, similarity, parentDocGuid, ...}" }
+        "201": { description: "상속 복원 완료 (mode=inherited) — 새 파생 라벨 발급" }
+  /labels/by-hash/{hash}:
+    get:
+      summary: 라벨 원본 회수 (복원·정책 재적용) — 공개 조회
+      parameters:
+        - { name: hash, in: path, required: true, schema: { type: string }, description: hex SHA-256 }
+        - { name: kind, in: query, schema: { type: string, enum: [content, text] }, description: text = 텍스트 해시(재저장본)로 조회 }
+      responses:
+        "200": { description: "{docGuid, grade, labelData, revoked, destroyed, ...}" }
+        "404": { description: 원장에 라벨 없음 }
+  /formats:
+    get:
+      summary: 포맷 카탈로그 (단일 진실 원천 formats.yaml — 공개, ETag 캐시)
+      responses:
+        "200": { description: "{version, generatedAt, formats[]}" }
+        "304": { description: 변경 없음 (If-None-Match) }
+  /formats/resolve:
+    post:
+      summary: 단일 파일 판정 — 파일 미업로드 (파일명 + 앞 16바이트 매직만)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename]
+              properties:
+                filename: { type: string }
+                magicHex: { type: string, description: 파일 앞부분 hex (최대 16바이트) }
+      responses:
+        "200": { description: 포맷 정보 + 실제 적용 방식 + 폴백 사유 }
+  /trust/list:
+    get:
+      summary: 신뢰목록 (PWA 오프라인 캐시 대상 — 자기 CA + 파트너 CA + 폐기 인증서 SN)
+      responses:
+        "200": { description: 신뢰목록 }
+  /trust/import:
+    post:
+      summary: 파트너 기관 CA 반입
+      security: [{ ApiKey: [] }]
+      responses:
+        "201": { description: 반입 완료 }
+  /treaties:
+    get:
+      summary: 등가성 협정 목록 (Phase 2 — 항상 빈 목록)
+      responses:
+        "200": { description: 협정 목록 }
+  /batch/scan:
+    post:
+      summary: 대량 소급 라벨링 (비동기)
+      security: [{ ApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '#/components/schemas/IssueRequest' } }
+      responses:
+        "202": { description: '{jobId}' }
+  /batch/{jobId}:
+    get:
+      summary: 배치 상태 조회
+      security: [{ ApiKey: [] }]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: 작업 상태·결과 }
+        "404": { description: 작업 없음 }

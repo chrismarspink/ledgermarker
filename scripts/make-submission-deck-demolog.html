@@ -1,0 +1,49 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>
+body{margin:0;background:#fff;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;width:1400px;padding:6px}
+.card{background:#1a2b4a;border-radius:12px;padding:12px 14px;color:#e5e7eb;min-height:150px}
+.t{font-size:15px;font-weight:700;color:#fff;margin-bottom:6px}
+pre{margin:0;font:11.5px/1.45 'Menlo','Courier New',monospace;white-space:pre-wrap;word-break:break-all;color:#c3cad6}
+b.ok{color:#7fd39a;font-weight:700} b.warn{color:#f0c060;font-weight:700}
+</style></head><body><div class="grid"><div class="card"><div class="t">① 파일 안에 라벨 내장</div><pre>발급 완료 (파일에 내장 — ZIP 아카이브 코멘트 (LMLABEL1: base64)): 문서관리규정.docx
+  docGuid=4dda6bab… seq=28 등급=S 유효기간=2027-09-24 형식=ooxml(container)
+  → 내장 후에도 ZIP 정상 개방 (파일 미손상)
+발급 완료 (파일에 내장 — 파일 끝 LMLABEL1 트레일러 (CFB LMLabel 스트림 내장은 Phase 2 실측 후)): 공문.hwp</pre></div><div class="card"><div class="t">② 복사·개명 후 동일 파일 식별</div><pre>귀속: docGuid=4dda6bab… 등급=S 상태=CONFIRMED 발급기관=KPOST (confidence 1.0)
+   서명=<b class="ok">valid</b>  원장=<b class="ok">registered</b>  폐기=none  유효기간=in_window  협정=not_applicable</pre></div><div class="card"><div class="t">③ 라벨 제거 → 해시 재식별 → 라벨 복원</div><pre>라벨(코멘트) 제거본 생성 — 원본 바이트 보존
+   귀속: docGuid=4dda6bab… 등급=S 상태=CONFIRMED 발급기관=KPOST (confidence 1.0)
+   서명=<b class="warn">absent</b>  원장=<b class="ok">registered</b>  폐기=none  유효기간=in_window  협정=not_applicable
+라벨 <b class="ok">복원 완료</b> (파일에 내장): 유실본.docx
+  docGuid=4dda6bab… 등급=S KPOST (원장 seq 28)
+   서명=<b class="ok">valid</b>  원장=<b class="ok">registered</b>  폐기=none  유효기간=in_window  협정=not_applicable</pre></div><div class="card"><div class="t">④ 일부 수정본 → 지문·의미로 원본 식별</div><pre>문서관리규정_개정안.docx 의 원본 후보 3건 (LSH 후보 → 내용 유사도 순):
+  1. <b class="ok">유사도 73%</b>  문서관리규정.docx  등급=S  docGuid=4dda6bab… KPOST
+  2. <b class="ok">유사도 73%</b>  문서관리규정.docx  등급=S  docGuid=a86848c9… KPOST
+  3. <b class="ok">유사도 63%</b>  (파일명 없음)  등급=O  docGuid=c7aab682… KPOST
+docsim(讀心) 정밀 비교 (엔진A 슁글 / 엔진B 의미):
+  1. docGuid=4dda6bab… → 판정=<b class="ok">재작성</b> (같은 내용, 다른 표현) · 의미=0.97 · 슁글=0.70
+  2. docGuid=a86848c9… → 판정=<b class="ok">재작성</b> (같은 내용, 다른 표현) · 슁글=0.69 · 의미=0.96</pre></div><div class="card"><div class="t">⑤ DOCX→PDF 변환 파생관계</div><pre>report.pdf 의 원본 후보 3건 (LSH 후보 → 내용 유사도 순):
+  1. <b class="ok">유사도 100%</b>  report.docx  등급=O  docGuid=100fc828… KPOST
+  2. <b class="ok">유사도 77%</b>  보안등급운영보고서_2026.docx  등급=O  docGuid=5e8e7237… KPOST
+  3. <b class="ok">유사도 77%</b>  보안등급운영보고서_2026.pdf  등급=O  docGuid=f812a797… KPOST
+docsim(讀心) 정밀 비교 (엔진A 슁글 / 엔진B 의미):
+  1. docGuid=100fc828… → 판정=<b class="ok">동일 문서</b> · 슁글=1.00 · 의미=1.00</pre></div><div class="card"><div class="t">⑥ 편집기 재저장 → 텍스트 해시 재식별</div><pre>재저장본 생성 — 바이트 전면 변경 + 라벨 소실 (본문 텍스트만 동일)
+   귀속: docGuid=4dda6bab… 등급=S 상태=CONFIRMED 발급기관=KPOST (confidence 1.0)
+   서명=<b class="warn">absent</b>  원장=<b class="ok">registered</b>  폐기=none  유효기간=in_window  협정=not_applicable
+원시 해시 미등록 — 텍스트 해시로 <b class="ok">재식별</b>했습니다 (재저장·재압축본)
+라벨 <b class="ok">복원 완료</b>: 재저장본.docx.lmsig
+  docGuid=4dda6bab… 등급=S KPOST (원장 seq 28)</pre></div><div class="card"><div class="t">⑦ Lineage/Audit — 원장·체인 무결성</div><pre>원장 tip=30 · 표시 구간 seq 25~30
+seq   이벤트      등급 docGuid       contentHash   actor            created(UTC)
+25    ISSUE    O  10e84814…     e2eb39454ada… api:sample:msit… 2026-09-24 23:29:08
+26    DESTROY     1e82aab8…     3aa5cb397e1f… api              2026-09-24 23:29:08 →ref 3
+27    DERIVE   S  61e30d1d…     6ad840032d51… api:sample:priv… 2026-09-24 23:29:22 ←edit
+28    ISSUE    S  4dda6bab…     b79a4fb11a53… api:issue:b79a4… 2026-09-24 23:38:46
+29    ISSUE    S  6a9d4d3b…     b2e729dce138… api:issue:b2e72… 2026-09-24 23:39:00
+30    ISSUE    O  100fc828…     7d85380c9464… api:issue:7d853… 2026-09-24 23:39:28
+<b class="ok">무결</b>: 30행 점검 완료</pre></div><div class="card"><div class="t">⑧ 기관 간 전달 — 협정 번역 / 협정 없음</div><pre>── 문서관리규정.docx
+   KPOST → INNOTIUM 전달 기록 (SENT) · docGuid=4dda6bab… 등급=S 발급기관=KPOST
+   파일 복사: inbox-INNOTIUM/문서관리규정.docx
+   받는 쪽: lm receive &lt;파일&gt; --as INNOTIUM
+── inbox-INNOTIUM/문서관리규정.docx
+   귀속: docGuid=4dda6bab… 등급=S 상태=CONFIRMED 발급기관=KPOST (confidence 1.0)
+   서명=<b class="ok">valid</b>  원장=<b class="ok">registered</b>  폐기=none  유효기간=in_window  협정=<b class="ok">translated</b>
+   기관 간: 발급 KPOST 등급 S → 검증 기관 기준 S
+   참고 판정(verdictHint): <b class="ok">allow</b>  [ledger_<b class="ok">registered</b>, signature_<b class="ok">valid</b>, treaty_<b class="ok">translated</b>]</pre></div></div></body></html>

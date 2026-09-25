@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #fff; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+  svg text { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+</style></head>
+<body>
+<svg id="c" width="1260" height="860" viewBox="0 0 1260 860" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+const NS = 'http://www.w3.org/2000/svg'
+const svg = document.getElementById('c')
+const el = (t, a, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; svg.appendChild(e); return e }
+const L = 130, R = 40, T = 90, B = 210, W = 1260, H = 860
+const x0 = L, x1 = W - R, y0 = T, y1 = H - B
+const cats = ['5 KB', '50 KB', '500 KB', '5 MB']
+const xs = (i) => x0 + (i + 0.5) * (x1 - x0) / cats.length
+const lo = -1, hi = 6 // log10 ms: 0.1 ms .. 1,000,000 ms
+const ys = (v) => y1 - (Math.log10(v) - lo) / (hi - lo) * (y1 - y0)
+// 제목
+el('text', { x: W / 2, y: 44, 'font-size': 26, 'font-weight': 700, fill: '#1a2b4a', 'text-anchor': 'middle' }, '문서 하나의 지문 계산 시간 — 만 배 차이 (로그 눈금)')
+// 격자·y축 라벨
+const ticks = [[0.1, '0.1 ms'], [1, '1 ms'], [10, '10 ms'], [100, '100 ms'], [1000, '1 s'], [10000, '10 s'], [100000, '100 s'], [1000000, '1,000 s']]
+for (const [v, lab] of ticks) {
+  el('line', { x1: x0, y1: ys(v), x2: x1, y2: ys(v), stroke: '#e5e7eb', 'stroke-width': 1 })
+  el('text', { x: x0 - 14, y: ys(v) + 7, 'font-size': 18, fill: '#6b7280', 'text-anchor': 'end' }, lab)
+}
+el('line', { x1: x0, y1: y0, x2: x0, y2: y1, stroke: '#9aa4b2', 'stroke-width': 1.5 })
+el('line', { x1: x0, y1: y1, x2: x1, y2: y1, stroke: '#9aa4b2', 'stroke-width': 1.5 })
+cats.forEach((c, i) => el('text', { x: xs(i), y: y1 + 34, 'font-size': 20, fill: '#111827', 'text-anchor': 'middle', 'font-weight': 600 }, c))
+el('text', { x: (x0 + x1) / 2, y: y1 + 70, 'font-size': 18, fill: '#6b7280', 'text-anchor': 'middle' }, '본문 텍스트 크기 →')
+el('text', { x: 28, y: (y0 + y1) / 2, 'font-size': 18, fill: '#6b7280', 'text-anchor': 'middle', transform: `rotate(-90 28 ${(y0 + y1) / 2})` }, '문서 1건 지문 계산 시간')
+// 시간대 띠
+// 띠 라벨은 데이터가 없는 구석에: 초록 띠는 오른쪽 아래, 주황 띠는 왼쪽 위
+const band = (a, b, lab, col, lx, ly, anchor) => { el('rect', { x: x0, y: ys(b), width: x1 - x0, height: ys(a) - ys(b), fill: col, opacity: 0.35 }); el('text', { x: lx, y: ly, 'font-size': 15, fill: '#6b7280', 'text-anchor': anchor }, lab) }
+band(0.1, 1000, '1초 미만 — 게이트 검증 경로에 실을 수 있는 구간', '#e6f4ec', x1 - 10, y1 - 12, 'end')
+band(1000, 1000000, '수십 초 ~ 분 — 후보 상위 N건에만 쓰는 구간', '#fff4dc', x0 + 10, y0 + 22, 'start')
+// 시리즈
+const series = [
+  { name: 'MinHash 지문  O(n) — 실측 0.65 ms / 5 KB, 선형 외삽', col: '#1a2b4a', v: [0.65, 6.5, 65, 650], lab: ['0.65 ms', '6.5 ms', '65 ms', '650 ms'], dash: '' },
+  { name: 'docsim 讀心 상주 프로세스  O(청크) — 23 ms/청크 (모델 로드 제외)', col: '#b07a00', v: [480, 4600, 46000, 460000], lab: ['0.5 s', '4.6 s', '46 s', '460 s'], dash: '' },
+  { name: 'docsim 讀心 1회 실행 — 모델 로드 12 s 포함 (5 KB·50 KB 실측)', col: '#9aa4b2', v: [15300, 19400, 58000, 470000], lab: ['15 s', '19 s', '58 s', '470 s'], dash: '10 8' }
+]
+series.forEach((s, si) => {
+  const d = s.v.map((v, i) => `${i ? 'L' : 'M'}${xs(i)},${ys(v)}`).join(' ')
+  el('path', { d, fill: 'none', stroke: s.col, 'stroke-width': 4, 'stroke-dasharray': s.dash, 'stroke-linejoin': 'round' })
+  s.v.forEach((v, i) => {
+    el('circle', { cx: xs(i), cy: ys(v), r: 8, fill: s.col, stroke: '#fff', 'stroke-width': 3 })
+    // 라벨 자리: MinHash는 점 아래, 상주(주황)는 점 위(5 MB 열은 아래), 1회 실행(회색)은 더 위로 띄워 겹침 방지
+    const dy = si === 0 ? 30 : si === 1 ? (i === 3 ? 34 : -16) : (i >= 2 ? -34 : -16)
+    el('text', { x: xs(i), y: ys(v) + dy, 'font-size': 17, 'font-weight': 700, fill: s.col, 'text-anchor': 'middle' }, s.lab[i])
+  })
+})
+// 만 배 화살표 (5 MB 열: 650 ms vs 460 s → 700배, 5 KB 열: 0.65 ms vs 480 ms → 740배; 실행 포함 시 2만 배)
+el('line', { x1: xs(0) + 60, y1: ys(0.65), x2: xs(0) + 60, y2: ys(15300), stroke: '#b02a2a', 'stroke-width': 2, 'stroke-dasharray': '6 5' })
+el('text', { x: xs(0) + 72, y: (ys(0.65) + ys(15300)) / 2, 'font-size': 17, 'font-weight': 700, fill: '#b02a2a' }, '× 23,000')
+el('text', { x: xs(0) + 72, y: (ys(0.65) + ys(15300)) / 2 + 22, 'font-size': 14, fill: '#b02a2a' }, '(1회 실행 기준, 상주 시 × 740)')
+// 범례
+series.forEach((s, i) => {
+  const y = H - 118 + i * 34
+  el('line', { x1: x0, y1: y, x2: x0 + 44, y2: y, stroke: s.col, 'stroke-width': 4, 'stroke-dasharray': s.dash })
+  el('circle', { cx: x0 + 22, cy: y, r: 7, fill: s.col, stroke: '#fff', 'stroke-width': 2 })
+  el('text', { x: x0 + 58, y: y + 6, 'font-size': 17, fill: '#111827' }, s.name)
+})
+</script>
+</body></html>
