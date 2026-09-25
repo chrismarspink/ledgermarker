@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // TrustAnchor 는 신뢰목록 항목(파트너 기관 CA)이다.

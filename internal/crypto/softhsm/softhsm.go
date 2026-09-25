@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"time"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
 )
 
 // 인증서 계층 (DEV SPEC §5.1):

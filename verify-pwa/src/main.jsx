@@ -14,7 +14,8 @@ import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    {/* GitHub Pages 처럼 하위 경로에 올릴 때(vite --base) 라우터 기준 경로를 맞춘다 */}
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <Routes>
         <Route element={<App />}>
           {/* 메뉴는 문서 수명주기 시간순: 대시보드 → 생성 → 원장 → 검증 */}

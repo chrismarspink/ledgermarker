@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/innotium/ledgermarker/internal/server"
-	"github.com/innotium/ledgermarker/internal/treaty"
-	gatesdk "github.com/innotium/ledgermarker/sdk/go"
+	"github.com/chrismarspink/ledgermarker/internal/server"
+	"github.com/chrismarspink/ledgermarker/internal/treaty"
+	gatesdk "github.com/chrismarspink/ledgermarker/sdk/go"
 )
 
 // 모델 A(단일 서버 다중 기관): 검증 기관이 발급 기관과 다를 때 협정 번역(L3).

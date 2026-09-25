@@ -8,7 +8,7 @@ import (
 
 	pdflib "github.com/ledongthuc/pdf"
 
-	"github.com/innotium/ledgermarker/internal/attach"
+	"github.com/chrismarspink/ledgermarker/internal/attach"
 )
 
 // ExtractText 는 지문 계산용 텍스트를 추출한다. 지원하지 않는 형식이면

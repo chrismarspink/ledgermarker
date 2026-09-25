@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/store"
+	"github.com/chrismarspink/ledgermarker/internal/store"
 )
 
 // 게이트 관측 로그 API — 기관 간 문서 이동(보냄·수신)과 타 기관 게이트의

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/store"
-	"github.com/innotium/ledgermarker/internal/treaty"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/store"
+	"github.com/chrismarspink/ledgermarker/internal/treaty"
 )
 
 // Config 는 서버 구성이다.

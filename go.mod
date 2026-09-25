@@ -1,4 +1,4 @@
-module github.com/innotium/ledgermarker
+module github.com/chrismarspink/ledgermarker
 
 go 1.26.5
 

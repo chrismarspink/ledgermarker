@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/lineage"
-	"github.com/innotium/ledgermarker/internal/store"
-	"github.com/innotium/ledgermarker/internal/verify"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/lineage"
+	"github.com/chrismarspink/ledgermarker/internal/store"
+	"github.com/chrismarspink/ledgermarker/internal/verify"
 )
 
 // handleVerify 는 POST /v1/verify — 가장 중요한 계약이다 (DEV SPEC §6.3).

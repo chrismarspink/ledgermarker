@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
 )
 
 // Store 는 Writer가 필요로 하는 최소 저장소 계약이다.

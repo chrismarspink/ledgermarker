@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"net/http"
 
-	"github.com/innotium/ledgermarker/internal/fingerprint"
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // 재수화(rehydrate) 임계치.

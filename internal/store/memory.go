@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // ErrUnavailable 은 원장 접속 불가를 흉내낼 때 반환된다 (T6 테스트용).

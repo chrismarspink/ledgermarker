@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
-	"github.com/innotium/ledgermarker/internal/issue"
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/treaty"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
+	"github.com/chrismarspink/ledgermarker/internal/issue"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/treaty"
 )
 
 // 체크 항목 값 (DEV SPEC §6.3)

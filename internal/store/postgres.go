@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // Postgres 는 운영 저장소다. 원장 append-only 강제는 스키마

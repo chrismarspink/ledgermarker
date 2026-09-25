@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
-	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
-	"github.com/innotium/ledgermarker/internal/issue"
-	"github.com/innotium/ledgermarker/internal/verify"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
+	"github.com/chrismarspink/ledgermarker/internal/crypto/softhsm"
+	"github.com/chrismarspink/ledgermarker/internal/issue"
+	"github.com/chrismarspink/ledgermarker/internal/verify"
 )
 
 func testSigner(t *testing.T) (lmcrypto.Signer, *x509.CertPool) {

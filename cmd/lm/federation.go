@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	gatesdk "github.com/innotium/ledgermarker/sdk/go"
+	gatesdk "github.com/chrismarspink/ledgermarker/sdk/go"
 )
 
 // ── 기관 간 전달 (모델 A) ────────────────────────────────────

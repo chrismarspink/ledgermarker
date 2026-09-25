@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/smallstep/pkcs7"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
 )
 
 // Build 는 라벨을 CMS SignedData(DER)로 조립·서명한다.

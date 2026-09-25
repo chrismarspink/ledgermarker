@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/innotium/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
 )
 
 // handleIdentify 는 지문으로 유사 문서를 찾는다 (POST /v1/identify).

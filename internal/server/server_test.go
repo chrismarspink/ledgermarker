@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
-	"github.com/innotium/ledgermarker/internal/fingerprint"
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/server"
-	"github.com/innotium/ledgermarker/internal/store"
-	gatesdk "github.com/innotium/ledgermarker/sdk/go"
+	"github.com/chrismarspink/ledgermarker/internal/crypto/softhsm"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/server"
+	"github.com/chrismarspink/ledgermarker/internal/store"
+	gatesdk "github.com/chrismarspink/ledgermarker/sdk/go"
 )
 
 type env struct {

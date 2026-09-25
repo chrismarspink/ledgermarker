@@ -1,0 +1,45 @@
+# 웹(PWA)을 GitHub Pages 에 정적 배포한다.
+# Pages 는 정적 파일만 서비스하므로 화면은 뜨지만 검증·원장·유사도 API 는 서버(lmserver)가 있어야 동작한다.
+# 서버를 따로 띄우면 빌드 시 VITE_LM_SERVER 에 그 주소를 주면 된다(Actions variable LM_SERVER_URL).
+name: pages
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: verify-pwa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: verify-pwa/package-lock.json
+      - run: npm ci
+      - run: npm run build -- --base=/ledgermarker/
+        env:
+          VITE_LM_SERVER: ${{ vars.LM_SERVER_URL }}
+      - run: cp dist/index.html dist/404.html   # SPA 딥링크(/verify 등) 대응
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: verify-pwa/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

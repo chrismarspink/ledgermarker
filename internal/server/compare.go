@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/innotium/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
 )
 
 // handleCompare 는 두 본문 텍스트의 유사도를 계산한다 (POST /v1/compare).

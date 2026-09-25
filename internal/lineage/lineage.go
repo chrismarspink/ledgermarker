@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // Reader 는 계보 조회가 필요로 하는 원장 접근 계약이다.

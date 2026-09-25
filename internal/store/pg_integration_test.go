@@ -15,9 +15,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/store"
-	"github.com/innotium/ledgermarker/migrations"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/store"
+	"github.com/chrismarspink/ledgermarker/migrations"
 )
 
 func pgSetup(t *testing.T) *store.Postgres {

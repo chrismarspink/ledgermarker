@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/attach"
-	"github.com/innotium/ledgermarker/internal/fingerprint"
-	"github.com/innotium/ledgermarker/internal/issue"
-	"github.com/innotium/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/attach"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/issue"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
 )
 
 // IssueRequest 는 POST /v1/labels 본문이다 (DEV SPEC §6.2).

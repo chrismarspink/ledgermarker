@@ -16,10 +16,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/innotium/ledgermarker/internal/attach"
-	"github.com/innotium/ledgermarker/internal/fingerprint"
-	"github.com/innotium/ledgermarker/internal/ledger"
-	"github.com/innotium/ledgermarker/internal/store"
+	"github.com/chrismarspink/ledgermarker/internal/attach"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/ledger"
+	"github.com/chrismarspink/ledgermarker/internal/store"
 )
 
 // 샘플 일괄 발급(기능 테스트) — POST /v1/admin/load-samples.

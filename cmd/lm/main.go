@@ -21,12 +21,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	"github.com/innotium/ledgermarker/internal/attach"
-	"github.com/innotium/ledgermarker/internal/fingerprint"
+	"github.com/chrismarspink/ledgermarker/internal/attach"
+	"github.com/chrismarspink/ledgermarker/internal/fingerprint"
 
-	gatesdk "github.com/innotium/ledgermarker/sdk/go"
+	gatesdk "github.com/chrismarspink/ledgermarker/sdk/go"
 
-	"github.com/innotium/ledgermarker/internal/crypto/softhsm"
+	"github.com/chrismarspink/ledgermarker/internal/crypto/softhsm"
 )
 
 // sidecarExt: 사이드카 파일명 <원본파일명>.lmsig (DER).

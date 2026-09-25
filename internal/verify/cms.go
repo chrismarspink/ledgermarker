@@ -7,7 +7,7 @@ import (
 
 	"github.com/smallstep/pkcs7"
 
-	lmcrypto "github.com/innotium/ledgermarker/internal/crypto"
+	lmcrypto "github.com/chrismarspink/ledgermarker/internal/crypto"
 )
 
 // CMSVerifier 는 crypto.Verifier의 pkcs7 기반 구현이다.
